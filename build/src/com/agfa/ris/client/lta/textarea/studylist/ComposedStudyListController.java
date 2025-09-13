@@ -785,6 +785,10 @@ implements IReportSeverityEditableObserver {
         if (StringUtils.isNotEmpty(selectedStudyUID) && CurrentLoadedItemModel.getInstance().getLoadedItem() != null) {
             this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
         }
+
+        // NEW: also blend Added studies into the main Comparison list (dedup & refresh via existing logic)
+        // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
+        this.mergeComparisons(java.util.Collections.singletonList(requestedProcedure), false);
     }
 
     private void showWarnDialog() {
