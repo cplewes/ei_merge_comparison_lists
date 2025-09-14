@@ -74,9 +74,29 @@ Common patterns in decompiled Java code:
 - Anonymous class constructors referencing undefined variables (`string`, `bl`)
 - Complex stream expressions that need simplification for compilation
 
+## Critical OSGi Bundle Considerations
+
+### JAR Rebuilding Requirements
+**IMPORTANT**: The AGFA RIS system uses OSGi bundles with complex dependency resolution. When rebuilding JARs:
+
+1. **Preserve OSGi Metadata**: Always use `jar -cfm` with original MANIFEST.MF to maintain:
+   - Bundle-SymbolicName declarations
+   - Export-Package lists (100+ packages)
+   - Import-Package dependencies
+   - Require-Bundle relationships
+
+2. **Never Use Basic `jar -cf`**: Creates minimal manifests that break OSGi dependency resolution
+
+3. **Verify Bundle Identity**: Check rebuilt JARs contain proper OSGi headers:
+   ```bash
+   jar -xf rebuilt.jar META-INF/MANIFEST.MF
+   grep "Bundle-SymbolicName.*com.agfa.ris.client.lta" META-INF/MANIFEST.MF
+   ```
+
 ### Development Notes
 - Always compile from `build/src/` directory, not root `com/` directory
-- JAR rebuilding replaces .class files in original JAR structure maintaining functionality
+- JAR rebuilding preserves OSGi bundle structure and metadata
 - Both classes compile with only 3 deprecation warnings (acceptable)
 - 756 JAR dependencies provide complete AGFA framework classpath
-- Rebuilt JAR maintains same functionality as original
+- Rebuilt JAR maintains same functionality AND proper OSGi bundle identity
+- **OSGi Resolution Errors**: Indicate missing bundle metadata in rebuilt JARs
