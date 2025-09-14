@@ -786,9 +786,23 @@ implements IReportSeverityEditableObserver {
             this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
         }
 
-        // NEW: also blend Added studies into the main Comparison list (dedup & refresh via existing logic)
+        // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
         // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
-        this.mergeComparisons(java.util.Collections.singletonList(requestedProcedure), false);
+        // Use direct addition to additionalComparisons to avoid filterByProcedureStatus() that excludes external studies
+        if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
+            !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
+            this.additionalComparisons.add(requestedProcedure);
+
+            // Update the main comparison model to show the blended study
+            List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
+            newComparisons.add(requestedProcedure);
+            this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
+
+            // Update ReportingContext with all studies
+            Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
+            List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
+            ReportingContext.setAllPatientProcedures(allStudies);
+        }
     }
 
     private void showWarnDialog() {

@@ -100,3 +100,47 @@ Common patterns in decompiled Java code:
 - 756 JAR dependencies provide complete AGFA framework classpath
 - Rebuilt JAR maintains same functionality AND proper OSGi bundle identity
 - **OSGi Resolution Errors**: Indicate missing bundle metadata in rebuilt JARs
+
+## Blended Comparison List Feature
+
+### Feature Description
+Implemented a "blended comparison list" feature that automatically shows Added studies in the main Comparison list without requiring user clicks, providing a seamless zero-click UX.
+
+### Implementation Details
+
+**Files Modified:**
+- `ComparisonStudiesDock.java`: Added auto-triggering logic in `triggerSearch()` method
+- `ComposedStudyListController.java`: Enhanced `addAddedComparison()` method with blending capability
+
+**Key Changes:**
+1. **Auto-trigger Added search**: When Comparison tab is selected, automatically triggers the same first-time Added search
+2. **Blend Added into Comparison**: Each Added study is automatically added to the main Comparison list without filtering
+3. **Preserve Added tab functionality**: Added studies remain visible in their dedicated tab
+
+### Critical Filtering Issue Resolution
+
+**Problem Identified:** Initial blended implementation only showed 25/41 Added studies due to filtering.
+
+**Root Cause Analysis:**
+- `mergeComparisons()` applies `filterByProcedureStatus()` which filters out external studies from archives like "IDC North"
+- Filter excludes studies that are NOT current/associated AND cancelled AND have no reports AND have no images
+- External archive studies are labeled "External Study" vs "Comparison Study" and often meet exclusion criteria
+- `addAddedComparison()` adds studies directly without filtering (shows all 41 studies)
+
+**Solution Implemented:**
+- Replaced `mergeComparisons()` call with direct addition logic in `addAddedComparison()`
+- Studies are added directly to `additionalComparisons` without `filterByProcedureStatus()` filtering
+- Maintains deduplication logic and proper model updates
+- Preserves AeCode handling for LOCAL vs external studies
+
+**Code Pattern:**
+```java
+// Direct addition to avoid filtering that excludes external studies
+if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
+    !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
+    this.additionalComparisons.add(requestedProcedure);
+    // Update main comparison model and ReportingContext
+}
+```
+
+**Result:** Blended comparison list now shows all Added studies (41/41) including external archive studies from "IDC North" and other remote locations.
