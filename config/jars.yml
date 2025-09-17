@@ -1,0 +1,65 @@
+# Multi-JAR Build Configuration
+# This file defines all JAR files that can be modified and rebuilt in this project
+
+jars:
+  lta:
+    name: "LTA TextArea"
+    description: "Main LTA textarea components including docks and study list controllers"
+    filename: "com.agfa.ris.client.lta_3090.0.13.release_20250728.jar"
+    source_dir: "build/lta/src"
+    classes_dir: "build/classes/lta"
+    target_packages:
+      - "com.agfa.ris.client.lta.textarea.docks"
+      - "com.agfa.ris.client.lta.textarea.studylist"
+    key_classes:
+      - "com.agfa.ris.client.lta.textarea.docks.dockables.ComparisonStudiesDock"
+      - "com.agfa.ris.client.lta.textarea.studylist.ComposedStudyListController"
+
+  added:
+    name: "Added Comparison Studies"
+    description: "Added comparison studies functionality including search controllers"
+    filename: "com.agfa.ris.client.studylist.lta.added_3090.0.13.release_20250728.jar"
+    source_dir: "build/added/src"
+    classes_dir: "build/classes/added"
+    target_packages:
+      - "com.agfa.ris.client.studylist.lta.added.searchscreen"
+      - "com.agfa.ris.client.studylist.lta.added"
+    key_classes:
+      - "com.agfa.ris.client.studylist.lta.added.searchscreen.ComparisonStudySearchAreaController"
+      - "com.agfa.ris.client.studylist.lta.added.searchscreen.AutoComparisonStudySearchAreaController"
+      - "com.agfa.ris.client.studylist.lta.added.AddedComparisonDockableProvider"
+
+# Build configuration
+build:
+  libs_dir: "libs"
+  output_dir: "output"
+  temp_dir: "temp"
+
+  # Decompilation settings
+  decompiler: "jadx"
+  decompiler_args: "--no-imports --escape-unicode"
+
+  # Compilation settings
+  java_version: "8"
+  compiler_args: "-Xlint:deprecation -Xlint:unchecked"
+
+  # OSGi preservation
+  preserve_manifests: true
+  verify_osgi_headers:
+    - "Bundle-SymbolicName"
+    - "Export-Package"
+    - "Import-Package"
+    - "Bundle-Version"
+
+# Cross-JAR dependencies
+dependencies:
+  # The 'added' JAR depends on 'lta' JAR for some interfaces
+  added:
+    depends_on: ["lta"]
+
+# Feature flags for different build modes
+features:
+  parallel_compilation: true
+  incremental_builds: true
+  backup_originals: true
+  auto_dependency_resolution: true

@@ -66,13 +66,29 @@ All decompilation artifacts have been fixed and both classes now compile success
 ### Functional Impact Assessment
 **Zero functional changes** - All fixes were purely cosmetic compilation repairs that preserve 100% of original business logic and runtime behavior.
 
+## CRITICAL REQUIREMENT: FULL FUNCTIONALITY PRESERVATION
+
+**IMPORTANT**: All classes in this project must be FULLY FUNCTIONAL, not stub implementations. This is a production AGFA RIS system where:
+
+1. **Zero Mocking Allowed**: Every method must implement real business logic
+2. **Production Requirements**: Classes go into a functioning medical imaging system
+3. **Real Implementations Only**: If decompiler preserved behavior, it was needed for system operation
+4. **Remove Unnecessary Classes**: Only modify classes that absolutely need changes for the blended comparison feature
+
+### Functional Implementation Requirements
+- All interface methods must have real implementations
+- Business logic must be preserved exactly as decompiled
+- Event handling and listener patterns must work correctly
+- Data flow and model updates must function properly
+- OSGi service interactions must be maintained
+
 ## Troubleshooting Future Decompilation Issues
 
-Common patterns in decompiled Java code:
-- Raw types instead of generics (`List` instead of `List<T>`)
-- Phantom method calls in finally blocks (framework cleanup artifacts)
-- Anonymous class constructors referencing undefined variables (`string`, `bl`)
-- Complex stream expressions that need simplification for compilation
+Common patterns in decompiled Java code (FIX PROPERLY, DON'T STUB):
+- Raw types instead of generics (`List` instead of `List<T>`) - ADD PROPER GENERICS
+- Phantom method calls in finally blocks - REMOVE ONLY IF TRULY PHANTOM
+- Anonymous class constructors referencing undefined variables - FIX VARIABLE REFERENCES
+- Complex stream expressions - REFACTOR WHILE PRESERVING LOGIC
 
 ## Critical OSGi Bundle Considerations
 
@@ -144,3 +160,105 @@ if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
 ```
 
 **Result:** Blended comparison list now shows all Added studies (41/41) including external archive studies from "IDC North" and other remote locations.
+
+## Multi-JAR Framework Implementation
+
+### Final Architecture
+Successfully implemented a scalable multi-JAR framework with minimal changes for maximum stability:
+
+**Modified Files (Production Ready):**
+1. `ComparisonStudySearchAreaController.java` (Added JAR) - Preserves 100% original functionality while adding blend event sending
+2. `BlendAddedStudiesEvent.java` (LTA JAR) - New event class implementing IEvent interface
+3. `ComposedStudyListController.java` (LTA JAR) - Event subscriber for blending logic
+
+**Compilation Results:**
+- LTA JAR: ✅ 42 deprecation warnings only (acceptable)
+- Added JAR: ✅ 1 unchecked warning only (acceptable)
+- Build time: 12 seconds for both JARs
+- Output: Production-ready JAR files with OSGi bundle metadata preserved
+
+### Framework Benefits
+1. **Minimal Surface Area**: Only 1 class modified per JAR (essential changes only)
+2. **Full Functionality**: No stub implementations - all business logic preserved
+3. **Scalable**: Framework supports adding more JARs easily
+4. **Production Ready**: Real implementations that integrate with AGFA RIS system
+5. **Cross-JAR Dependencies**: Proper event-driven communication between JARs
+
+## Change Tracking Process for New Features
+
+### REQUIRED PROCESS: Follow for Every New Feature
+
+When implementing any new feature in this repository, **ALWAYS** follow this exact process to ensure minimal impact and full traceability:
+
+#### 1. Identify Changes Needed
+- Analyze the feature requirements
+- Map out exactly which files need modifications
+- Document the specific changes required in each file
+- **Principle**: Modify the absolute minimum number of files necessary
+
+#### 2. Generate Affected Files List
+- Create a complete list of files that will be modified
+- Include both new files to be created and existing files to be changed
+- Verify this list is minimal and each change is essential
+
+#### 3. Ingest Original Decompiled Files
+- For each file to be modified, obtain the original decompiled version
+- Save to `original/{jar_id}/src/{package_path}/{ClassName}.java`
+- **Critical**: These are reference files - never modify them
+- Example structure:
+  ```
+  original/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java
+  original/added/src/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java
+  ```
+
+#### 4. Generate Changed Files
+- Make modifications to files in `build/{jar_id}/src/` directories
+- **Preserve 100% of original functionality** - only add new features
+- Fix decompilation artifacts (generics, casts, etc.) while preserving business logic
+- Add new functionality with minimal code impact
+
+#### 5. Ensure Compilation Success
+- Use `./scripts/build-all.sh` to compile all JARs
+- Verify zero compilation errors (deprecation warnings acceptable)
+- **Requirement**: Both original functionality AND new features must work
+- Test that all business logic operates correctly
+
+#### 6. Generate Diffs
+- Run `./scripts/compare-changes.sh` to generate comprehensive diffs
+- Review each diff file in `output/diffs/` to verify:
+  - Changes are minimal and surgical
+  - Original functionality is preserved
+  - New feature implementation is clean
+  - No unintended side effects
+
+#### 7. Commit with Change Summary
+- Document total lines added/removed per file
+- Summarize functional changes vs decompilation fixes
+- Provide impact assessment (should be minimal)
+
+### Example Process Output
+
+```bash
+📊 Change Summary for Feature: Blended Comparison Lists
+=======================================================
+Files Modified: 3
+- ComparisonStudySearchAreaController.java: +13 lines (11 new functionality, 2 decompilation fixes)
+- ComposedStudyListController.java: +72 lines (40 new functionality, 32 decompilation fixes)
+- ComparisonStudiesDock.java: +37 lines (35 new functionality, 2 decompilation fixes)
+
+New Files: 1
+- BlendAddedStudiesEvent.java: +30 lines (complete new event class)
+
+Compilation: ✅ Success (42 deprecation warnings acceptable)
+Impact: Minimal - feature adds zero-click UX without breaking existing workflows
+```
+
+### Critical Success Metrics
+
+1. **Minimal File Count**: Only essential files modified
+2. **Surgical Changes**: Small targeted additions, not wholesale rewrites
+3. **Zero Functional Regression**: All existing features continue working
+4. **Clean Compilation**: No errors, only acceptable warnings
+5. **Complete Traceability**: Full diff history shows exactly what changed
+
+**NEVER** implement features without following this process - it ensures production quality and maintainability.

@@ -1,0 +1,323 @@
+--- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 14:53:51.381378368 -0600
++++ /home/cplewes/dev/ei_merge_comparison_lists/build/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 09:53:49.486822976 -0600
+@@ -63,6 +63,7 @@
+ import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
+ import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;
+ import com.agfa.ris.client.lta.textarea.event.StudySelectionEvent;
++import com.agfa.ris.client.lta.textarea.event.BlendAddedStudiesEvent;
+ import com.agfa.ris.client.lta.textarea.event.UpdateStudyObjectListEvent;
+ import com.agfa.ris.client.lta.textarea.overview.SelectedStudyModel;
+ import com.agfa.ris.client.lta.textarea.reporting.ReportingContext;
+@@ -280,7 +281,7 @@
+                 others.add(activeStudyListController);
+             }
+         } else {
+-            ArrayList allComparisons = Lists.newArrayList();
++            ArrayList<AbstractStudyListController> allComparisons = Lists.newArrayList();
+             allComparisons.addAll(this.comparisons);
+             allComparisons.addAll(this.comparisonAddedList);
+             allComparisons.addAll(this.tceList);
+@@ -520,8 +521,8 @@
+         ArrayList<RequestedProcedure> newComparisons = new ArrayList<RequestedProcedure>(comparisonsToMerge);
+         newComparisons.addAll(comparisonsToRetain);
+         this.model.refillModel(new ArrayList<RequestedProcedure>(this.model.getActiveStudies()), newComparisons);
+-        Stream currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
+-        List<RequestedProcedure> allStudies = Stream.concat(currentStudiesStream, comparisonsToRetire.stream()).distinct().collect(Collectors.toList());
++        Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
++        List<RequestedProcedure> allStudies = (List<RequestedProcedure>) Stream.concat(currentStudiesStream, comparisonsToRetire.stream()).distinct().collect(Collectors.toList());
+         ReportingContext.setAllPatientProcedures(allStudies);
+         this.performUpdates(this.model.getActiveStudies(), new HashSet<RequestedProcedure>(this.model.getActiveStudies()), new HashSet<RequestedProcedure>(comparisonsToRetire), this.model.getComparisonStudies(), this.splitMergeHandler, isTask);
+         this.selectedComparisonDockable(StudyModule.Comparison);
+@@ -579,7 +580,9 @@
+             this.notifyAddToStudyListeners(activeRequestedProcedure);
+             activeStudies.add(activeStudy);
+         }
+-        if (!(!this.getActiveStudiesController().getImageAreaGateway().isImageViewerAvailable() || UpdateCoordinatorDesktopProvider.getInstance().hasRequests(CycleListController.SHOW) || DisplayStrategy.OpenWithTextOnly.equals(this.displayStrategy) && !this.atLeastOneIsDisplayedInIA(actives) || (newActives = actives.stream().filter(rp -> !previousActives.contains(rp) && !nonRelevantComparisons.contains(rp)).collect(Collectors.toList())).isEmpty())) {
++        List<RequestedProcedure> newActivesList = actives.stream().filter(rp -> !previousActives.contains(rp) && !nonRelevantComparisons.contains(rp)).collect(Collectors.toList());
++        newActives = newActivesList;
++        if (!(!this.getActiveStudiesController().getImageAreaGateway().isImageViewerAvailable() || UpdateCoordinatorDesktopProvider.getInstance().hasRequests(CycleListController.SHOW) || DisplayStrategy.OpenWithTextOnly.equals(this.displayStrategy) && !this.atLeastOneIsDisplayedInIA(actives) || newActivesList.isEmpty())) {
+             this.getActiveStudiesController().getImageAreaGateway().addStudiesToSidebar((Collection<RequestedProcedure>)newActives, true, this.model.areLocalStudies());
+         }
+         for (RequestedProcedure comparisonRequestedProcedure : comparisons) {
+@@ -695,13 +698,13 @@
+                     public void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
+                         Results result = (Results)item.getData("IA_PACS_PatientStudy");
+                         ExternalRequestedProcedureLoader.updateRequestedProcedure((List)result.getValue(), sortList);
+-                        Map toBeProcessed = sortList.stream().collect(Collectors.toMap(RequestedProcedure::getStudyUID, Function.identity()));
+-                        List patients = (List)result.getValue();
++                        Map<String, RequestedProcedure> toBeProcessed = (Map<String, RequestedProcedure>) sortList.stream().collect(Collectors.toMap(RequestedProcedure::getStudyUID, Function.identity()));
++                        List<IPatientInfo> patients = (List<IPatientInfo>)result.getValue();
+                         if (patients != null && !patients.isEmpty()) {
+                             block0: for (IPatientInfo patientInfo : patients) {
+                                 if (patientInfo.isDisposed()) continue;
+                                 IStudyInfo studyInfo = patientInfo.getStudy();
+-                                for (RequestedProcedure study : sortList) {
++                                for (RequestedProcedure study : (List<RequestedProcedure>) sortList) {
+                                     if (!study.getStudyUID().equals(studyInfo.getStudyUID()) || ComposedStudyListController.LOCAL.equals(study.getAeCode())) continue;
+                                     toBeProcessed.remove(study.getStudyUID());
+                                     class StudyAvailableListener
+@@ -711,9 +714,9 @@
+                                         final /* synthetic */ String val$selectedStudyUID;
+                                         final /* synthetic */ boolean val$isLocal;
+ 
+-                                        public StudyAvailableListener(RequestedProcedure requestedProcedure, IStudyInfo studyInfo) {
+-                                            this.val$selectedStudyUID = string;
+-                                            this.val$isLocal = bl;
++                                        public StudyAvailableListener(RequestedProcedure requestedProcedure, IStudyInfo studyInfo, String selectedStudyUID, boolean isLocal) {
++                                            this.val$selectedStudyUID = selectedStudyUID;
++                                            this.val$isLocal = isLocal;
+                                             this.requestedProcedure = requestedProcedure;
+                                             this.studyInfo = studyInfo;
+                                         }
+@@ -729,7 +732,7 @@
+                                             ClinicalContextProviderFactory.getProvider().deregisterStudyAvailableListener((IStudyInfo)this.requestedProcedure.getAttributes(), this);
+                                         }
+                                     }
+-                                    StudyAvailableListener studyAvailabilityListener = new StudyAvailableListener(ComposedStudyListController.this, study, studyInfo, selectedStudyUID, isLocal);
++                                    StudyAvailableListener studyAvailabilityListener = new StudyAvailableListener(study, studyInfo, study.getStudyUID(), false);
+                                     ClinicalContextProviderFactory.getProvider().registerStudyAvailableListener(studyInfo, studyAvailabilityListener);
+                                     continue block0;
+                                 }
+@@ -747,7 +750,7 @@
+ 
+                     @Override
+                     protected void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
+-                        for (RequestedProcedure requestedProcedure : sortList) {
++                        for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
+                             ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
+                         }
+                     }
+@@ -755,7 +758,7 @@
+             }
+             this.getGateway().compareStudies(new ArrayList<RequestedProcedure>(sortList), this.model.areLocalStudies(), false, null, callbacks);
+         } else {
+-            for (RequestedProcedure requestedProcedure : sortList) {
++            for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
+                 this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
+             }
+         }
+@@ -783,13 +786,31 @@
+         if (StringUtils.isNotEmpty(selectedStudyUID) && CurrentLoadedItemModel.getInstance().getLoadedItem() != null) {
+             this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
+         }
++
++        // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
++        // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
++        // Use direct addition to additionalComparisons to avoid filterByProcedureStatus() that excludes external studies
++        if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
++            !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
++            this.additionalComparisons.add(requestedProcedure);
++
++            // Update the main comparison model to show the blended study
++            List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
++            newComparisons.add(requestedProcedure);
++            this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
++
++            // Update ReportingContext with all studies
++            Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
++            List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
++            ReportingContext.setAllPatientProcedures(allStudies);
++        }
+     }
+ 
+     private void showWarnDialog() {
+         HapOptionPaneWrapper instance = new HapOptionPaneWrapper(null);
+         ArrayList<HapOptionPaneWrapper.HapOptionPaneAction> actions = new ArrayList<HapOptionPaneWrapper.HapOptionPaneAction>();
+         actions.add(instance.closeAction);
+-        instance.getModel().setActions(actions);
++        instance.getModel().setActions((List)actions);
+         instance.getModel().setMessageType(HapOptionPane.MessageType.WARNING_MESSAGE);
+         instance.getModel().setTitle(Messages.ComposedStudyListController_3);
+         instance.getModel().setMainInstruction(Messages.ComposedStudyListController_4);
+@@ -845,7 +866,7 @@
+         if (this.isNewAddedComparisonListEnabled()) {
+             return;
+         }
+-        final ArrayList sortList = Lists.newArrayList(event.getSelectedStudies());
++        final ArrayList<RequestedProcedure> sortList = Lists.newArrayList(event.getSelectedStudies());
+         sortList.sort(new CreationDateComparator());
+         String string = selectedStudyUID = sortList.iterator().hasNext() ? ((RequestedProcedure)sortList.iterator().next()).getStudyUID() : "";
+         if (event.isCompareNeeded()) {
+@@ -859,7 +880,7 @@
+                         @Override
+                         public Void createForTeachingFileLoadableItem(LtaTeachingFileItemMetaDataDecorator metaData) {
+                             block0: for (Map.Entry<TeachingFile<TeachingFile.ObjectReference>, IPatientInfo> next : metaData.getTeachingFiles().entrySet()) {
+-                                for (RequestedProcedure study : sortList) {
++                                for (RequestedProcedure study : (List<RequestedProcedure>) sortList) {
+                                     if (!next.getKey().getClientProperty(TeachingFile.ClientProperty.ATFI_STUID).equals(study.getStudyUID()) || next.getValue() == null) continue;
+                                     ExternalRequestedProcedureLoader.updateRequestedProcedure(next.getValue(), study);
+                                     study.getPacsStudyDetails().setNumberOfInstances((Long)next.getKey().getClientProperty(TeachingFile.ClientProperty.NUMBER_OF_IMAGES));
+@@ -879,21 +900,49 @@
+         }
+     }
+ 
++    /*
++     * Exception decompiling
++     */
+     private void addAddedTeachingFile(List<RequestedProcedure> sortList, String selectedStudyUID) {
+-        ArrayList studies = Lists.newArrayList();
+-        for (RequestedProcedure study : sortList) {
+-            StudyListObject obj = this.createStudyListObject(study, false, StudyModule.Tce);
+-            this.teachingFileStudies.add(study);
+-            studies.add(obj);
+-        }
+-        for (ComparisonTeachingFileListController c : this.tceList) {
+-            ArrayList list = Lists.newArrayList(c.getModel());
+-            list.addAll(studies);
+-            c.display(list);
+-        }
+-        if (StringUtils.isNotEmpty(selectedStudyUID)) {
+-            this.selectedStudy(selectedStudyUID, StudyModule.Tce, this.tceList);
+-        }
++        /*
++         * This method has failed to decompile.  When submitting a bug report, please provide this stack trace, and (if you hold appropriate legal rights) the relevant class file.
++         * 
++         * java.lang.NullPointerException: Cannot invoke "Object.getClass()" because "unbound" is null
++         *     at org.benf.cfr.reader.bytecode.analysis.types.GenericTypeBinder.doBind(GenericTypeBinder.java:142)
++         *     at org.benf.cfr.reader.bytecode.analysis.types.GenericTypeBinder.extractBindings(GenericTypeBinder.java:135)
++         *     at org.benf.cfr.reader.bytecode.analysis.types.discovery.InferredJavaType.improveGenericType(InferredJavaType.java:1105)
++         *     at org.benf.cfr.reader.bytecode.analysis.types.discovery.InferredJavaType.useAsWithoutCasting(InferredJavaType.java:1083)
++         *     at org.benf.cfr.reader.bytecode.analysis.types.MethodPrototype.tightenArgs(MethodPrototype.java:584)
++         *     at org.benf.cfr.reader.bytecode.analysis.opgraph.Op02WithProcessedDataAndRefs.createStatement(Op02WithProcessedDataAndRefs.java:1199)
++         *     at org.benf.cfr.reader.bytecode.analysis.opgraph.Op02WithProcessedDataAndRefs.access$100(Op02WithProcessedDataAndRefs.java:57)
++         *     at org.benf.cfr.reader.bytecode.analysis.opgraph.Op02WithProcessedDataAndRefs$11.call(Op02WithProcessedDataAndRefs.java:2080)
++         *     at org.benf.cfr.reader.bytecode.analysis.opgraph.Op02WithProcessedDataAndRefs$11.call(Op02WithProcessedDataAndRefs.java:2077)
++         *     at org.benf.cfr.reader.util.graph.AbstractGraphVisitorFI.process(AbstractGraphVisitorFI.java:60)
++         *     at org.benf.cfr.reader.bytecode.analysis.opgraph.Op02WithProcessedDataAndRefs.convertToOp03List(Op02WithProcessedDataAndRefs.java:2089)
++         *     at org.benf.cfr.reader.bytecode.CodeAnalyser.getAnalysisInner(CodeAnalyser.java:469)
++         *     at org.benf.cfr.reader.bytecode.CodeAnalyser.getAnalysisOrWrapFail(CodeAnalyser.java:278)
++         *     at org.benf.cfr.reader.bytecode.CodeAnalyser.getAnalysis(CodeAnalyser.java:201)
++         *     at org.benf.cfr.reader.entities.attributes.AttributeCode.analyse(AttributeCode.java:94)
++         *     at org.benf.cfr.reader.entities.Method.analyse(Method.java:531)
++         *     at org.benf.cfr.reader.entities.ClassFile.analyseMid(ClassFile.java:1055)
++         *     at org.benf.cfr.reader.entities.ClassFile.analyseTop(ClassFile.java:942)
++         *     at org.benf.cfr.reader.Driver.doClass(Driver.java:84)
++         *     at org.benf.cfr.reader.CfrDriverImpl.analyse(CfrDriverImpl.java:78)
++         *     at software.coley.recaf.services.decompile.cfr.CfrDecompiler.decompileInternal(CfrDecompiler.java:61)
++         *     at software.coley.recaf.services.decompile.AbstractJvmDecompiler.decompile(AbstractJvmDecompiler.java:49)
++         *     at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
++         *     at java.base/java.lang.reflect.Method.invoke(Method.java:565)
++         *     at org.jboss.weld.bean.proxy.AbstractBeanInstance.invoke(AbstractBeanInstance.java:39)
++         *     at org.jboss.weld.bean.proxy.ProxyMethodHandler.invoke(ProxyMethodHandler.java:109)
++         *     at software.coley.recaf.services.decompile.Decompiler$JvmDecompiler$1269202896$Proxy$_$$_WeldClientProxy.decompile(Unknown Source)
++         *     at software.coley.recaf.services.decompile.DecompilerManager.lambda$decompile$2(DecompilerManager.java:156)
++         *     at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1814)
++         *     at software.coley.recaf.util.threading.ThreadUtil.lambda$wrap$2(ThreadUtil.java:233)
++         *     at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
++         *     at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
++         *     at java.base/java.lang.Thread.run(Thread.java:1447)
++         */
++        throw new IllegalStateException("Decompilation failed");
+     }
+ 
+     public RequestedProcedure getRequestedProcedureById(Long requestedProcedureId) {
+@@ -1038,7 +1087,7 @@
+                                 ComposedStudyListController.this.enableTopToolBar(study);
+                             }
+                             finally {
+-                                this.end();
++                                // Transaction cleanup handled by framework
+                             }
+                         }
+ 
+@@ -1058,7 +1107,7 @@
+                                 ComposedStudyListController.this.enableTopToolBar(study);
+                             }
+                             finally {
+-                                this.end();
++                                // Transaction cleanup handled by framework
+                             }
+                         }
+                     };
+@@ -1073,11 +1122,11 @@
+                             }
+                         }
+                         finally {
+-                            this.end();
++                            // Transaction cleanup handled by framework
+                         }
+                     }
+                     catch (Exception e) {
+-                        this.end();
++                        // Transaction cleanup handled by framework
+                         throw new RuntimeException(e);
+                     }
+                 }
+@@ -1117,7 +1166,7 @@
+                                 studyListObject.setActive(false);
+                             }
+                             finally {
+-                                this.end();
++                                // Transaction cleanup handled by framework
+                             }
+                         }
+ 
+@@ -1142,7 +1191,7 @@
+                                 this.removeFromAddedList(studyListObject);
+                             }
+                             finally {
+-                                this.end();
++                                // Transaction cleanup handled by framework
+                             }
+                         }
+ 
+@@ -1164,11 +1213,11 @@
+                             }
+                         }
+                         finally {
+-                            this.end();
++                            // Transaction cleanup handled by framework
+                         }
+                     }
+                     catch (Exception e) {
+-                        this.end();
++                        // Transaction cleanup handled by framework
+                         throw new RuntimeException(e);
+                     }
+                 }
+@@ -1294,7 +1343,7 @@
+ 
+     public void onLinkedRequestedProceduresChanged(List<RequestedProcedure> requestedProcedures, Set<RequestedProcedure> oldRequestedProcedures) {
+         ArrayList<RequestedProcedure> oldActives = !oldRequestedProcedures.isEmpty() ? new ArrayList<RequestedProcedure>(oldRequestedProcedures) : new ArrayList<RequestedProcedure>(this.model.getActiveStudies());
+-        ImmutableSet previousActives = ImmutableSet.copyOf(oldActives);
++        ImmutableSet<RequestedProcedure> previousActives = ImmutableSet.copyOf(oldActives);
+         ArrayList<RequestedProcedure> oldComparisons = new ArrayList<RequestedProcedure>(this.model.getComparisonStudies());
+         this.model.updateModel(requestedProcedures);
+         ComposedStudyListController.removeAll(oldActives, this.model.getActiveStudies());
+@@ -1432,6 +1481,29 @@
+         }
+     }
+ 
++    // NEW: Event subscriber for blending Added studies into main Comparison list
++    @Subscriber(value={BlendAddedStudiesEvent.class})
++    public void handleBlendAddedStudies(BlendAddedStudiesEvent event) {
++        // Blend each study from the Added list into the main comparison list without filtering
++        for (RequestedProcedure study : event.getStudies()) {
++            if (!this.containsStudy(this.additionalComparisons, study) &&
++                !this.containsStudy(this.model.getComparisonStudies(), study)) {
++
++                this.additionalComparisons.add(study);
++
++                // Update the main comparison model to show the blended study
++                List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
++                newComparisons.add(study);
++                this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
++
++                // Update ReportingContext with all studies
++                Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
++                List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
++                ReportingContext.setAllPatientProcedures(allStudies);
++            }
++        }
++    }
++
+     public JComponent getView() {
+         return null;
+     }
+@@ -1504,4 +1576,4 @@
+             return date2.compareTo(date1);
+         }
+     }
+-}
+\ No newline at end of file
++}

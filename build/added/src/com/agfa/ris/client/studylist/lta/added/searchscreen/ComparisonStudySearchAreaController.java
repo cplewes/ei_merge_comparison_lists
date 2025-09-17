@@ -1,0 +1,129 @@
+package com.agfa.ris.client.studylist.lta.added.searchscreen;
+
+import com.agfa.hap.ext.Assert;
+import com.agfa.hap.ext.tableconfig.TableConfigSetupService;
+import com.agfa.ris.client.domainmodel.ris.IAttachmentOwner;
+import com.agfa.ris.client.domainmodel.ris.RequestedProcedure;
+import com.agfa.ris.client.domainmodel.ris.SearchLocation;
+import com.agfa.ris.client.lta.actions.GuestCacheCheckerUtil;
+import com.agfa.ris.client.lta.listarea.controller.SearchLocationManager;
+import com.agfa.ris.client.lta.textarea.event.Add2ComparisonStudiesEvent;
+import com.agfa.ris.client.platform.sdo.DataAccessServiceWithCaching;
+import com.agfa.ris.client.platform.ui.cycling.SelectedPriorSelectClauseProxy;
+import com.agfa.ris.client.studylist.lta.added.AddedComparisonStudiesList;
+import com.agfa.ris.client.studylist.lta.added.searchscreen.AbstractComparisonSearchAreaController;
+import com.agfa.ris.client.studylist.lta.added.searchscreen.ComparisonStudySearchModel;
+import com.agfa.ris.common.workschema.ListContentType;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+
+public class ComparisonStudySearchAreaController
+extends AbstractComparisonSearchAreaController<RequestedProcedure> {
+    private static final String TOP_TOOLBAR_ID = "comparison.studies";
+    private static final String COMPARISON_STUDIES_SEARCH_DEFINITION = "_comparison_study_search";
+    public static final String identifier = "comparison.study.searcharea";
+    protected ComparisonStudySearchModel<RequestedProcedure> searchModel;
+    private AddedComparisonStudiesList addedComparisonStudiesList;
+    AtomicReference<Function<Add2ComparisonStudiesEvent, Boolean>> callback = new AtomicReference<Function<Add2ComparisonStudiesEvent, Boolean>>();
+
+    @Override
+    public ComparisonStudySearchModel<RequestedProcedure> getComparisonStudySearchModel() {
+        return this.searchModel;
+    }
+
+    public ComparisonStudySearchAreaController() {
+        this(identifier);
+    }
+
+    public ComparisonStudySearchAreaController(String identifier) {
+        super(identifier);
+        this.searchModel = new ComparisonStudySearchModel<RequestedProcedure>();
+        this.studySearchScreenController.getFilterController().addClearListener(this);
+        this.dicomSearchScreenController.getFilterController().addClearListener(this);
+        this.enterpriseSearchScreenController.getFilterController().addClearListener(this);
+    }
+
+    public void setStudyList(AddedComparisonStudiesList studyList) {
+        this.addedComparisonStudiesList = studyList;
+    }
+
+    public boolean isHasBodyPartsColumnInPlusTab() {
+        List tableConfigItemList = TableConfigSetupService.getAddedComparisonStudiesTableConfigItemList();
+        return tableConfigItemList.stream().anyMatch(tableConfigItem -> "bodyPartList".equals(((com.agfa.hap.ext.tableconfig.model.TableConfigItem)tableConfigItem).getIdentifier()));
+    }
+
+    @Override
+    protected void initSearchPanel() {
+        this.configTableDefinition("searchRequestedProceduresAndTasks", this.studySearchScreenController);
+        this.configTableDefinition("searchDicomStudies", this.dicomSearchScreenController);
+        this.configTableDefinition("searchEnterpriseSearch", this.enterpriseSearchScreenController);
+        super.initSearchPanel();
+    }
+
+    @Override
+    protected boolean isExclusiveLocation(SearchLocation searchLocation) {
+        if (SearchLocationManager.isTeachingFileLocation(searchLocation)) {
+            return true;
+        }
+        return super.isExclusiveLocation(searchLocation);
+    }
+
+    @Override
+    protected boolean add2ComparisonStudies(boolean needCompareImages) {
+        List<RequestedProcedure> selectedStudies = this.searchModel.getSelectedStudies();
+        String providerCode = IAttachmentOwner.getProviderCodeFromList(selectedStudies);
+        GuestCacheCheckerUtil.checkIfGuestCacheRequired(ListContentType.PROCEDURES, selectedStudies);
+        if (!this.searchModel.isExternalMode()) {
+            selectedStudies = DataAccessServiceWithCaching.getInstance("TextArea", providerCode).getCachedList(selectedStudies);
+        }
+        Add2ComparisonStudiesEvent add2ComparisonStudiesEvent = new Add2ComparisonStudiesEvent(selectedStudies, !this.searchModel.isExternalMode(), needCompareImages);
+        boolean result = false;
+        if (Objects.nonNull(this.addedComparisonStudiesList)) {
+            result = this.addedComparisonStudiesList.updateList(add2ComparisonStudiesEvent);
+        }
+        // NEW: Blending Logic - Send event to trigger blending into main comparison list
+        // This ensures all Added studies also appear in the main Comparison list without filtering
+        if (result && !selectedStudies.isEmpty()) {
+            try {
+                // Send a global event to blend these studies into the main comparison list
+                com.agfa.hap.ext.mvp.AppContext.getCurrentContext().getGlobalEventBus()
+                    .sendEvent(new com.agfa.ris.client.lta.textarea.event.BlendAddedStudiesEvent(selectedStudies, !this.searchModel.isExternalMode()));
+            } catch (Exception e) {
+                // Log but don't fail the main operation if blending fails
+                System.err.println("Warning: Failed to send blend event: " + e.getMessage());
+            }
+        }
+
+        if (result) {
+            this.searchScreensController.getFrontController().clear();
+        }
+        return result;
+    }
+
+    @Override
+    protected String getComparisonSearchAreaIdentifier() {
+        return COMPARISON_STUDIES_SEARCH_DEFINITION;
+    }
+
+    @Override
+    protected String getSelectClause() {
+        return SelectedPriorSelectClauseProxy.getInstance().getRequestedProcedureSelectClause().asCommaSeparatedString();
+    }
+
+    @Override
+    protected String getTopToolbarId() {
+        return TOP_TOOLBAR_ID;
+    }
+
+    protected boolean isExternalMode(String queryIdentifier) {
+        return "searchDicomStudies".equals(queryIdentifier) || "searchEnterpriseSearch".equals(queryIdentifier) || "searchTeachingFiles".equals(queryIdentifier);
+    }
+
+    public void show(Function<Add2ComparisonStudiesEvent, Boolean> callback) {
+        Assert.isEDT();
+        this.callback.set(callback);
+        this.getKey().setVisible(true);
+    }
+}
