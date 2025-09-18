@@ -464,9 +464,12 @@ implements IReportSeverityEditableObserver {
     }
 
     public void display(IAdaptable domainModel) {
-        StudyListData studyListData = (StudyListData)domainModel.getAdapter(StudyListData.class);
-        List<RequestedProcedure> activeStudies = studyListData.getActiveStudies();
-        List<RequestedProcedure> comparisonStudies = this.filterByProcedureStatus(studyListData.getRelevantStudies());
+        try {
+            this.logDebug("EI_TRACE: display() method called");
+            StudyListData studyListData = (StudyListData)domainModel.getAdapter(StudyListData.class);
+            List<RequestedProcedure> activeStudies = studyListData.getActiveStudies();
+            this.logDebug("EI_TRACE: display() - activeStudies count: " + activeStudies.size());
+            List<RequestedProcedure> comparisonStudies = this.filterByProcedureStatus(studyListData.getRelevantStudies());
         this.additionalComparisons.removeIf(s -> this.containsStudy((Collection<RequestedProcedure>)activeStudies, (RequestedProcedure)s));
         SplitMergeHandlerWrapper handlerWrapper = studyListData.getSplitMergeHandler();
         boolean isTask = studyListData.isTask();
@@ -491,16 +494,29 @@ implements IReportSeverityEditableObserver {
 
         // NEW: Auto-search for Added studies for the current patient to enable blending
         // This replaces the complex event-based auto-triggering with a direct approach
+        this.logDebug("EI_TRACE: Checking if should trigger Added search - activeStudies.isEmpty(): " + activeStudies.isEmpty());
         if (!activeStudies.isEmpty()) {
             Patient currentPatient = activeStudies.get(0).getPatient();
+            this.logDebug("EI_TRACE: Got patient from first active study - patient null: " + (currentPatient == null));
             if (currentPatient != null) {
+                this.logDebug("EI_TRACE: Patient found - " + currentPatient.toString() + " - triggering Added search");
                 // Use the existing Added search mechanism to find studies for this patient
                 // This will trigger the existing addAddedComparison logic to blend results
                 this.triggerAddedStudySearchForPatient(currentPatient);
+            } else {
+                this.logDebug("EI_TRACE: Patient is null - skipping Added search");
             }
+        } else {
+            this.logDebug("EI_TRACE: No active studies - skipping Added search");
         }
 
-        AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
+            AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
+        } catch (Exception e) {
+            String errorMsg = "Exception in display() method: " + e.getClass().getSimpleName() + ": " + e.getMessage();
+            this.logDebug("EI_TRACE: " + errorMsg);
+            LOGGER.error(errorMsg, e);
+            throw e;  // Re-throw to maintain existing behavior
+        }
     }
 
     /**
@@ -508,17 +524,23 @@ implements IReportSeverityEditableObserver {
      * of Added studies into the main comparison list.
      */
     private void triggerAddedStudySearchForPatient(Patient patient) {
+        this.logDebug("EI_TRACE: triggerAddedStudySearchForPatient() called for patient: " + patient);
         try {
             // Set the primary patient so the search uses the correct patient context
             this.setPrimaryPatient(patient);
+            this.logDebug("EI_TRACE: Set primary patient successfully");
 
             // Send the event to trigger Added study search (same mechanism as clicking Added tab)
+            this.logDebug("EI_TRACE: Sending TriggerAutoSearchForAddedComparisonEvent");
             AppContext.getCurrentContext().getGlobalEventBus()
                 .sendEvent(new TriggerAutoSearchForAddedComparisonEvent());
+            this.logDebug("EI_TRACE: TriggerAutoSearchForAddedComparisonEvent sent successfully");
 
         } catch (Exception e) {
             // Don't fail the main comparison loading if Added search fails
-            LOGGER.warn("Failed to trigger Added study search for patient: " + patient, e);
+            String errorMsg = "Failed to trigger Added study search for patient: " + patient + " - " + e.getClass().getSimpleName() + ": " + e.getMessage();
+            LOGGER.warn(errorMsg, e);
+            this.logDebug("EI_TRACE: Exception in triggerAddedStudySearchForPatient: " + errorMsg);
         }
     }
 
@@ -776,13 +798,21 @@ implements IReportSeverityEditableObserver {
 
     @Subscriber(value={Add2ComparisonStudiesEvent.class})
     public void updateComparisonAddedList(Add2ComparisonStudiesEvent event) {
+        try {
+            this.logDebug("EI_TRACE: updateComparisonAddedList() called - event received");
         String selectedStudyUID;
-        if (this.isNewAddedComparisonListEnabled()) {
+        boolean newListEnabled = this.isNewAddedComparisonListEnabled();
+        this.logDebug("EI_TRACE: isNewAddedComparisonListEnabled: " + newListEnabled);
+        if (newListEnabled) {
+            this.logDebug("EI_TRACE: New Added comparison list enabled - returning early");
             return;
         }
         final boolean isLocal = event.isLocal();
+        this.logDebug("EI_TRACE: Processing Add2ComparisonStudiesEvent - isLocal: " + isLocal + ", selectedStudies count: " + event.getSelectedStudies().size());
         final List sortList = event.getSelectedStudies().stream().filter(rp -> this.canBeAdded((RequestedProcedure)rp, isLocal)).sorted(ComposedStudyListController.getRequestedProcedureComparator()).collect(Collectors.toList());
+        this.logDebug("EI_TRACE: After filtering and sorting - sortList count: " + sortList.size());
         if (sortList.isEmpty()) {
+            this.logDebug("EI_TRACE: sortList is empty - no studies to add");
             if (event.isNeedCompareImages()) {
                 event.addResult(false);
                 this.showWarnDialog();
@@ -846,9 +876,13 @@ implements IReportSeverityEditableObserver {
                             }
                         }
                         if (!toBeProcessed.isEmpty()) {
+                            ComposedStudyListController.this.logDebug("EI_TRACE: Callback processing " + toBeProcessed.size() + " external studies");
                             for (RequestedProcedure requestedProcedure : toBeProcessed.values()) {
+                                ComposedStudyListController.this.logStudyDetails("EI_TRACE: Callback calling addAddedComparison for external study", requestedProcedure);
                                 ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                             }
+                        } else {
+                            ComposedStudyListController.this.logDebug("EI_TRACE: toBeProcessed is empty - no external studies to process");
                         }
                     }
                 });
@@ -857,7 +891,9 @@ implements IReportSeverityEditableObserver {
 
                     @Override
                     protected void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
+                        ComposedStudyListController.this.logDebug("EI_TRACE: Local studies callback processing " + sortList.size() + " studies");
                         for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
+                            ComposedStudyListController.this.logStudyDetails("EI_TRACE: Local callback calling addAddedComparison", requestedProcedure);
                             ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                         }
                     }
@@ -865,11 +901,20 @@ implements IReportSeverityEditableObserver {
             }
             this.getGateway().compareStudies(new ArrayList<RequestedProcedure>(sortList), this.model.areLocalStudies(), false, null, callbacks);
         } else {
+            this.logDebug("EI_TRACE: No image comparison needed - calling addAddedComparison directly for " + sortList.size() + " studies");
             for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
+                this.logStudyDetails("EI_TRACE: About to call addAddedComparison for study", requestedProcedure);
                 this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
             }
         }
-        LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
+            this.logDebug("EI_TRACE: updateComparisonAddedList completed");
+            LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
+        } catch (Exception e) {
+            String errorMsg = "Exception in updateComparisonAddedList(): " + e.getClass().getSimpleName() + ": " + e.getMessage();
+            this.logDebug("EI_TRACE: " + errorMsg);
+            LOGGER.error(errorMsg, e);
+            throw e;  // Re-throw to maintain existing behavior
+        }
     }
 
     static Comparator<RequestedProcedure> getRequestedProcedureComparator() {
