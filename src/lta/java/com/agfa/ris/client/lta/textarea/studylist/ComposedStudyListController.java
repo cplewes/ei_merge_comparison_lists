@@ -824,6 +824,8 @@ implements IReportSeverityEditableObserver {
         if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
             !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
             this.additionalComparisons.add(requestedProcedure);
+            // Set flag to prevent filtering of Added studies in future display() calls
+            this.setAdditionalComparisonsLoaded(true);
 
             // Update the main comparison model to show the blended study
             List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
