@@ -30,8 +30,10 @@ This repository contains decompiled Java source code from an AGFA RIS (Radiology
 ```
 
 ### Build Structure
-- `build/src/` - Source files for compilation (edit these)
+- `src/lta/java/` - LTA JAR source files (edit these)
+- `src/added/java/` - Added JAR source files (edit these)
 - `build/classes/` - Compiled .class files output
+- `output/` - Rebuilt JARs and analysis results
 - `libs/` - 756 JAR dependencies for classpath
 - `classpath.txt` - Generated classpath string
 
@@ -149,12 +151,12 @@ jar tf rebuilt.jar | grep "com/agfa/ris/client/lta/textarea" | wc -l
 - ✅ Zero ClassNotFoundException errors
 
 ### Development Notes
-- Always compile from `build/src/` directory, not root `com/` directory
+- Always compile from `src/{jar_id}/java/` directories (Maven/Gradle conventions)
 - JAR rebuilding preserves OSGi bundle structure and metadata
-- Both classes compile with only 3 deprecation warnings (acceptable)
+- Both classes compile with only deprecation warnings (acceptable)
 - 756 JAR dependencies provide complete AGFA framework classpath
 - Rebuilt JAR maintains same functionality AND proper OSGi bundle identity
-- **OSGi Resolution Errors**: Indicate missing bundle metadata in rebuilt JARs
+- **OSGi Resolution Errors**: Indicate missing bundle metadata or classes in rebuilt JARs
 
 ## Blended Comparison List Feature
 
