@@ -4,7 +4,9 @@ libs/
 # Compiled output - generated artifacts
 build/classes/
 build/jars/
+# Exclude JARs except those in output/ directory
 *.jar
+!output/*.jar
 
 # Temporary files
 temp/
