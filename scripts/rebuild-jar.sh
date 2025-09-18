@@ -64,13 +64,22 @@ echo "   📤 Extracting original JAR with metadata..."
 cd "$TEMP_DIR"
 jar -xf "$ORIGINAL_JAR"
 
-echo "   🔄 Replacing compiled classes..."
+echo "   🔄 Selectively replacing only compiled classes..."
 if [ -d "$CLASSES_DIR/$PACKAGE_PATH" ]; then
-    # Remove old classes and copy new ones
-    rm -rf "$PACKAGE_PATH" 2>/dev/null || true
-    mkdir -p "$(dirname "$PACKAGE_PATH")"
-    cp -r "$CLASSES_DIR/$PACKAGE_PATH" "$(dirname "$PACKAGE_PATH")/"
-    echo "   ✅ Replaced classes in: $PACKAGE_PATH"
+    # Find and replace only the specific .class files we compiled
+    find "$CLASSES_DIR/$PACKAGE_PATH" -name "*.class" -type f | while read -r class_file; do
+        # Get relative path from the classes directory
+        relative_path="${class_file#$CLASSES_DIR/}"
+        target_path="$relative_path"
+
+        # Create target directory if needed
+        mkdir -p "$(dirname "$target_path")"
+
+        # Copy the compiled class file, replacing the original
+        cp "$class_file" "$target_path"
+        echo "     ↻ Updated: $relative_path"
+    done
+    echo "   ✅ Selectively replaced $(find "$CLASSES_DIR/$PACKAGE_PATH" -name "*.class" -type f | wc -l) compiled classes"
 else
     echo "   ⚠️  No compiled classes found for package: $PACKAGE_PATH"
 fi
