@@ -1,5 +1,5 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/docks/dockables/ComparisonStudiesDock.java	2025-09-17 14:56:39.203973339 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/build/lta/src/com/agfa/ris/client/lta/textarea/docks/dockables/ComparisonStudiesDock.java	2025-09-17 09:14:22.612856326 -0600
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/docks/dockables/ComparisonStudiesDock.java	2025-09-17 22:17:21.311069796 -0600
 @@ -20,6 +20,8 @@
  import com.agfa.ris.client.lta.textarea.studylist.comparison.ComparisonStudySearchAreaController;
  import com.agfa.ris.client.lta.textarea.studylist.comparison.ComparisonTeachingFileListController;

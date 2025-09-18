@@ -1,5 +1,5 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 14:53:51.381378368 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/build/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 09:53:49.486822976 -0600
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 22:17:21.314069727 -0600
 @@ -63,6 +63,7 @@
  import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
  import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;

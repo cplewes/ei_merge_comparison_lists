@@ -1,5 +1,5 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/added/src/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java	2025-09-17 14:25:38.999865582 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/build/added/src/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java	2025-09-17 14:13:00.159449985 -0600
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/added/java/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java	2025-09-17 22:17:21.316069681 -0600
 @@ -1,116 +1,129 @@
 -package com.agfa.ris.client.studylist.lta.added.searchscreen;
 -

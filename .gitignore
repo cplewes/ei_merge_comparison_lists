@@ -15,5 +15,5 @@ temp/
 *.backup
 *.bak
 
-# Generated diffs and output
-output/
+# Generated diffs (but keep rebuilt JARs in git)
+output/diffs/

@@ -109,6 +109,45 @@ Common patterns in decompiled Java code (FIX PROPERLY, DON'T STUB):
    grep "Bundle-SymbolicName.*com.agfa.ris.client.lta" META-INF/MANIFEST.MF
    ```
 
+### ⚠️ CRITICAL: ClassNotFoundException Prevention
+
+**PROBLEM FIXED (2025-09-18)**: The original JAR rebuild process removed ALL classes under package directories and only replaced them with newly compiled classes, causing `ClassNotFoundException` for system classes like `NotificationClientEndPoint`.
+
+**ROOT CAUSE**:
+- Original: 2105 classes in `com/agfa/ris/client/lta/textarea/` package
+- Broken rebuild: Only 20 classes (our compiled modifications)
+- Missing: 2085 critical system classes including websocket notification handlers
+
+**SOLUTION IMPLEMENTED**: Updated `scripts/rebuild-jar.sh` to use **selective class replacement**:
+
+```bash
+# OLD (BROKEN) - Removes entire package directory:
+rm -rf "$PACKAGE_PATH"
+cp -r "$CLASSES_DIR/$PACKAGE_PATH" "$(dirname "$PACKAGE_PATH")/"
+
+# NEW (FIXED) - Only replaces specific compiled files:
+find "$CLASSES_DIR/$PACKAGE_PATH" -name "*.class" -type f | while read -r class_file; do
+    relative_path="${class_file#$CLASSES_DIR/}"
+    cp "$class_file" "$relative_path"
+done
+```
+
+**VERIFICATION REQUIRED**: After any JAR rebuild, always verify critical system classes:
+```bash
+# Check NotificationClientEndPoint is present
+jar tf rebuilt.jar | grep NotificationClientEndPoint
+
+# Verify class count matches original (should be original + new modifications)
+jar tf original.jar | grep "com/agfa/ris/client/lta/textarea" | wc -l
+jar tf rebuilt.jar | grep "com/agfa/ris/client/lta/textarea" | wc -l
+```
+
+**DEPLOYMENT SAFETY**: The fixed rebuilt JARs in `output/` directory contain:
+- ✅ All 2105+ original system classes preserved
+- ✅ 20 modified classes for blended comparison lists feature
+- ✅ Complete OSGi bundle metadata and structure
+- ✅ Zero ClassNotFoundException errors
+
 ### Development Notes
 - Always compile from `build/src/` directory, not root `com/` directory
 - JAR rebuilding preserves OSGi bundle structure and metadata
