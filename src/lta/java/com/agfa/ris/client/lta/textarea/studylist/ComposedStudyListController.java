@@ -836,6 +836,10 @@ implements IReportSeverityEditableObserver {
             Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
             List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
             ReportingContext.setAllPatientProcedures(allStudies);
+
+            // Force UI refresh to immediately show the new blended study
+            this.updateComparisonList(this.model.getActiveStudies(), this.model.getComparisonStudies(), this.splitMergeHandler, false);
+            this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
         }
     }
 
