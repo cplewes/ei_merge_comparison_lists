@@ -1,2 +1,14 @@
-# Ignore the libs directory
+# Dependencies
 libs/
+
+# Compiled output
+build/classes/
+
+# Temporary files
+temp/
+*.tmp
+*~
+
+# Backup files
+*.backup
+*.bak
