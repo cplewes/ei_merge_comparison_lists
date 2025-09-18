@@ -537,6 +537,20 @@ implements IReportSeverityEditableObserver {
         return collection.stream().map(RequestedProcedure::getPrimaryKey).anyMatch(pk -> pk.equals(study.getPrimaryKey()));
     }
 
+    private void logStudyDetails(String prefix, RequestedProcedure study) {
+        if (study == null) {
+            LOGGER.info(prefix + ": Study is null");
+            return;
+        }
+        LOGGER.info(prefix + ": StudyUID=" + study.getStudyUID() +
+                   ", AeCode=" + study.getAeCode() +
+                   ", AeTitle=" + study.getAeTitle() +
+                   ", PrimaryKey=" + study.getPrimaryKey() +
+                   ", Location=" + study.getLocation() +
+                   ", SearchLocation=" + (study.getSearchLocation() != null ? study.getSearchLocation().getLocationName() : "null") +
+                   ", External=" + study.isExternal());
+    }
+
     public void mergeComparisons(List<RequestedProcedure> comparisons, boolean isTask) {
         this.setAdditionalComparisonsLoaded(true);
         List<RequestedProcedure> comparisonsToMerge = this.filterByProcedureStatus(comparisons);
@@ -801,15 +815,25 @@ implements IReportSeverityEditableObserver {
     }
 
     private void addAddedComparison(RequestedProcedure requestedProcedure, String selectedStudyUID, boolean isLocal) {
+        LOGGER.info("=== DEBUG: addAddedComparison() called ===");
+        this.logStudyDetails("DEBUG: Processing study", requestedProcedure);
+        LOGGER.info("DEBUG: selectedStudyUID=" + selectedStudyUID + ", isLocal=" + isLocal);
+
         if (LOCAL.equals(requestedProcedure.getAeCode())) {
+            LOGGER.info("DEBUG: Study has LOCAL AeCode, checking for existing comparison study");
             for (RequestedProcedure comparison : this.model.getComparisonStudies()) {
                 if (!comparison.getStudyUID().equals(requestedProcedure.getStudyUID())) continue;
+                LOGGER.info("DEBUG: Found matching comparison study, creating deep copy");
                 requestedProcedure = (RequestedProcedure)comparison.deepCopy();
                 requestedProcedure.setAeTitle(LOCAL);
                 break;
             }
         }
+
+        LOGGER.info("DEBUG: Adding to addedComparisonStudies list (size before: " + this.addedComparisonStudies.size() + ")");
         this.addedComparisonStudies.add(requestedProcedure);
+        LOGGER.info("DEBUG: addedComparisonStudies size after: " + this.addedComparisonStudies.size());
+
         StudyDisplayUpdater.getInstance().addStudy(requestedProcedure);
         for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
             c.display(this.getStudyListObjects(this.addedComparisonStudies, isLocal));
@@ -821,26 +845,72 @@ implements IReportSeverityEditableObserver {
         // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
         // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
         // Use direct addition to additionalComparisons to avoid filterByProcedureStatus() that excludes external studies
-        if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
-            !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
+        LOGGER.info("DEBUG: Starting blending logic for main comparison list");
+        LOGGER.info("DEBUG: Current additionalComparisons size: " + this.additionalComparisons.size());
+        LOGGER.info("DEBUG: Current comparisonStudies size: " + this.model.getComparisonStudies().size());
+
+        boolean inAdditionalComparisons = this.containsStudy(this.additionalComparisons, requestedProcedure);
+        boolean inComparisonStudies = this.containsStudy(this.model.getComparisonStudies(), requestedProcedure);
+
+        LOGGER.info("DEBUG: Study already in additionalComparisons: " + inAdditionalComparisons);
+        LOGGER.info("DEBUG: Study already in comparisonStudies: " + inComparisonStudies);
+
+        if (inAdditionalComparisons) {
+            LOGGER.info("DEBUG: Study found in additionalComparisons - checking primary keys:");
+            for (RequestedProcedure existing : this.additionalComparisons) {
+                if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
+                    this.logStudyDetails("DEBUG: Matching study in additionalComparisons", existing);
+                    break;
+                }
+            }
+        }
+
+        if (inComparisonStudies) {
+            LOGGER.info("DEBUG: Study found in comparisonStudies - checking primary keys:");
+            for (RequestedProcedure existing : this.model.getComparisonStudies()) {
+                if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
+                    this.logStudyDetails("DEBUG: Matching study in comparisonStudies", existing);
+                    break;
+                }
+            }
+        }
+
+        if (!inAdditionalComparisons && !inComparisonStudies) {
+            LOGGER.info("DEBUG: Study not found in either collection - adding to blended list");
             this.additionalComparisons.add(requestedProcedure);
+            LOGGER.info("DEBUG: additionalComparisons size after add: " + this.additionalComparisons.size());
+
             // Set flag to prevent filtering of Added studies in future display() calls
             this.setAdditionalComparisonsLoaded(true);
+            LOGGER.info("DEBUG: Set additionalComparisonsLoaded to true");
 
             // Update the main comparison model to show the blended study
             List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
             newComparisons.add(requestedProcedure);
+            LOGGER.info("DEBUG: Created newComparisons list with size: " + newComparisons.size());
+
             this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
+            LOGGER.info("DEBUG: Called model.refillModel() with " + this.model.getActiveStudies().size() + " active studies and " + newComparisons.size() + " comparison studies");
 
             // Update ReportingContext with all studies
             Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
             List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
             ReportingContext.setAllPatientProcedures(allStudies);
+            LOGGER.info("DEBUG: Updated ReportingContext with " + allStudies.size() + " total studies");
 
             // Force UI refresh to immediately show the new blended study
             this.updateComparisonList(this.model.getActiveStudies(), this.model.getComparisonStudies(), this.splitMergeHandler, false);
+            LOGGER.info("DEBUG: Called updateComparisonList() for UI refresh");
+
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
+            LOGGER.info("DEBUG: Triggered tab title updates for all comparisons");
+
+            LOGGER.info("DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
+        } else {
+            LOGGER.info("DEBUG: Study already exists in collections - skipping blending");
         }
+
+        LOGGER.info("=== DEBUG: addAddedComparison() completed ===");
     }
 
     private void showWarnDialog() {

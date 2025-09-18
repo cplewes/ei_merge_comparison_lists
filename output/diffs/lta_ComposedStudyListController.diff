@@ -1,10 +1,10 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 14:53:51.381378368 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 22:17:21.314069727 -0600
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-18 11:50:55.600517393 -0600
 @@ -63,6 +63,7 @@
  import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
  import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;
  import com.agfa.ris.client.lta.textarea.event.StudySelectionEvent;
-+import com.agfa.ris.client.lta.textarea.event.BlendAddedStudiesEvent;
++import com.agfa.ris.client.lta.textarea.event.TriggerAutoSearchForAddedComparisonEvent;
  import com.agfa.ris.client.lta.textarea.event.UpdateStudyObjectListEvent;
  import com.agfa.ris.client.lta.textarea.overview.SelectedStudyModel;
  import com.agfa.ris.client.lta.textarea.reporting.ReportingContext;
@@ -17,7 +17,48 @@
              allComparisons.addAll(this.comparisons);
              allComparisons.addAll(this.comparisonAddedList);
              allComparisons.addAll(this.tceList);
-@@ -520,8 +521,8 @@
+@@ -483,9 +484,40 @@
+         for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
+             c.setFirstTrigger(ComparisonAddedStudyListController.trigger.NOT_TRIGGERED_YET);
+         }
++
++        // NEW: Auto-search for Added studies for the current patient to enable blending
++        // This replaces the complex event-based auto-triggering with a direct approach
++        if (!activeStudies.isEmpty()) {
++            Patient currentPatient = activeStudies.get(0).getPatient();
++            if (currentPatient != null) {
++                // Use the existing Added search mechanism to find studies for this patient
++                // This will trigger the existing addAddedComparison logic to blend results
++                this.triggerAddedStudySearchForPatient(currentPatient);
++            }
++        }
++
+         AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
+     }
+ 
++    /**
++     * Triggers an Added study search for the specified patient to enable automatic blending
++     * of Added studies into the main comparison list.
++     */
++    private void triggerAddedStudySearchForPatient(Patient patient) {
++        try {
++            // Set the primary patient so the search uses the correct patient context
++            this.setPrimaryPatient(patient);
++
++            // Send the event to trigger Added study search (same mechanism as clicking Added tab)
++            AppContext.getCurrentContext().getGlobalEventBus()
++                .sendEvent(new TriggerAutoSearchForAddedComparisonEvent());
++
++        } catch (Exception e) {
++            // Don't fail the main comparison loading if Added search fails
++            LOGGER.warn("Failed to trigger Added study search for patient: " + patient, e);
++        }
++    }
++
+     private void setComparisonObservers() {
+         for (final RequestedProcedure cmp : this.getModel().getComparisonStudies()) {
+             XObserver displayStatusObserver = new XObserver(){
+@@ -520,8 +552,8 @@
          ArrayList<RequestedProcedure> newComparisons = new ArrayList<RequestedProcedure>(comparisonsToMerge);
          newComparisons.addAll(comparisonsToRetain);
          this.model.refillModel(new ArrayList<RequestedProcedure>(this.model.getActiveStudies()), newComparisons);
@@ -28,7 +69,7 @@
          ReportingContext.setAllPatientProcedures(allStudies);
          this.performUpdates(this.model.getActiveStudies(), new HashSet<RequestedProcedure>(this.model.getActiveStudies()), new HashSet<RequestedProcedure>(comparisonsToRetire), this.model.getComparisonStudies(), this.splitMergeHandler, isTask);
          this.selectedComparisonDockable(StudyModule.Comparison);
-@@ -579,7 +580,9 @@
+@@ -579,7 +611,9 @@
              this.notifyAddToStudyListeners(activeRequestedProcedure);
              activeStudies.add(activeStudy);
          }
@@ -39,7 +80,7 @@
              this.getActiveStudiesController().getImageAreaGateway().addStudiesToSidebar((Collection<RequestedProcedure>)newActives, true, this.model.areLocalStudies());
          }
          for (RequestedProcedure comparisonRequestedProcedure : comparisons) {
-@@ -695,13 +698,13 @@
+@@ -695,13 +729,13 @@
                      public void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
                          Results result = (Results)item.getData("IA_PACS_PatientStudy");
                          ExternalRequestedProcedureLoader.updateRequestedProcedure((List)result.getValue(), sortList);
@@ -56,7 +97,7 @@
                                      if (!study.getStudyUID().equals(studyInfo.getStudyUID()) || ComposedStudyListController.LOCAL.equals(study.getAeCode())) continue;
                                      toBeProcessed.remove(study.getStudyUID());
                                      class StudyAvailableListener
-@@ -711,9 +714,9 @@
+@@ -711,9 +745,9 @@
                                          final /* synthetic */ String val$selectedStudyUID;
                                          final /* synthetic */ boolean val$isLocal;
  
@@ -69,7 +110,7 @@
                                              this.requestedProcedure = requestedProcedure;
                                              this.studyInfo = studyInfo;
                                          }
-@@ -729,7 +732,7 @@
+@@ -729,7 +763,7 @@
                                              ClinicalContextProviderFactory.getProvider().deregisterStudyAvailableListener((IStudyInfo)this.requestedProcedure.getAttributes(), this);
                                          }
                                      }
@@ -78,7 +119,7 @@
                                      ClinicalContextProviderFactory.getProvider().registerStudyAvailableListener(studyInfo, studyAvailabilityListener);
                                      continue block0;
                                  }
-@@ -747,7 +750,7 @@
+@@ -747,7 +781,7 @@
  
                      @Override
                      protected void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
@@ -87,7 +128,7 @@
                              ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                          }
                      }
-@@ -755,7 +758,7 @@
+@@ -755,7 +789,7 @@
              }
              this.getGateway().compareStudies(new ArrayList<RequestedProcedure>(sortList), this.model.areLocalStudies(), false, null, callbacks);
          } else {
@@ -96,7 +137,7 @@
                  this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
              }
          }
-@@ -783,13 +786,31 @@
+@@ -783,13 +817,37 @@
          if (StringUtils.isNotEmpty(selectedStudyUID) && CurrentLoadedItemModel.getInstance().getLoadedItem() != null) {
              this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
          }
@@ -107,6 +148,8 @@
 +        if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
 +            !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
 +            this.additionalComparisons.add(requestedProcedure);
++            // Set flag to prevent filtering of Added studies in future display() calls
++            this.setAdditionalComparisonsLoaded(true);
 +
 +            // Update the main comparison model to show the blended study
 +            List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
@@ -117,6 +160,10 @@
 +            Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
 +            List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
 +            ReportingContext.setAllPatientProcedures(allStudies);
++
++            // Force UI refresh to immediately show the new blended study
++            this.updateComparisonList(this.model.getActiveStudies(), this.model.getComparisonStudies(), this.splitMergeHandler, false);
++            this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
 +        }
      }
  
@@ -129,7 +176,7 @@
          instance.getModel().setMessageType(HapOptionPane.MessageType.WARNING_MESSAGE);
          instance.getModel().setTitle(Messages.ComposedStudyListController_3);
          instance.getModel().setMainInstruction(Messages.ComposedStudyListController_4);
-@@ -845,7 +866,7 @@
+@@ -845,7 +903,7 @@
          if (this.isNewAddedComparisonListEnabled()) {
              return;
          }
@@ -138,7 +185,7 @@
          sortList.sort(new CreationDateComparator());
          String string = selectedStudyUID = sortList.iterator().hasNext() ? ((RequestedProcedure)sortList.iterator().next()).getStudyUID() : "";
          if (event.isCompareNeeded()) {
-@@ -859,7 +880,7 @@
+@@ -859,7 +917,7 @@
                          @Override
                          public Void createForTeachingFileLoadableItem(LtaTeachingFileItemMetaDataDecorator metaData) {
                              block0: for (Map.Entry<TeachingFile<TeachingFile.ObjectReference>, IPatientInfo> next : metaData.getTeachingFiles().entrySet()) {
@@ -147,7 +194,7 @@
                                      if (!next.getKey().getClientProperty(TeachingFile.ClientProperty.ATFI_STUID).equals(study.getStudyUID()) || next.getValue() == null) continue;
                                      ExternalRequestedProcedureLoader.updateRequestedProcedure(next.getValue(), study);
                                      study.getPacsStudyDetails().setNumberOfInstances((Long)next.getKey().getClientProperty(TeachingFile.ClientProperty.NUMBER_OF_IMAGES));
-@@ -879,21 +900,49 @@
+@@ -879,21 +937,49 @@
          }
      }
  
@@ -211,7 +258,7 @@
      }
  
      public RequestedProcedure getRequestedProcedureById(Long requestedProcedureId) {
-@@ -1038,7 +1087,7 @@
+@@ -1038,7 +1124,7 @@
                                  ComposedStudyListController.this.enableTopToolBar(study);
                              }
                              finally {
@@ -220,7 +267,7 @@
                              }
                          }
  
-@@ -1058,7 +1107,7 @@
+@@ -1058,7 +1144,7 @@
                                  ComposedStudyListController.this.enableTopToolBar(study);
                              }
                              finally {
@@ -229,7 +276,7 @@
                              }
                          }
                      };
-@@ -1073,11 +1122,11 @@
+@@ -1073,11 +1159,11 @@
                              }
                          }
                          finally {
@@ -243,7 +290,7 @@
                          throw new RuntimeException(e);
                      }
                  }
-@@ -1117,7 +1166,7 @@
+@@ -1117,7 +1203,7 @@
                                  studyListObject.setActive(false);
                              }
                              finally {
@@ -252,7 +299,7 @@
                              }
                          }
  
-@@ -1142,7 +1191,7 @@
+@@ -1142,7 +1228,7 @@
                                  this.removeFromAddedList(studyListObject);
                              }
                              finally {
@@ -261,7 +308,7 @@
                              }
                          }
  
-@@ -1164,11 +1213,11 @@
+@@ -1164,11 +1250,11 @@
                              }
                          }
                          finally {
@@ -275,7 +322,7 @@
                          throw new RuntimeException(e);
                      }
                  }
-@@ -1294,7 +1343,7 @@
+@@ -1294,7 +1380,7 @@
  
      public void onLinkedRequestedProceduresChanged(List<RequestedProcedure> requestedProcedures, Set<RequestedProcedure> oldRequestedProcedures) {
          ArrayList<RequestedProcedure> oldActives = !oldRequestedProcedures.isEmpty() ? new ArrayList<RequestedProcedure>(oldRequestedProcedures) : new ArrayList<RequestedProcedure>(this.model.getActiveStudies());
@@ -284,37 +331,15 @@
          ArrayList<RequestedProcedure> oldComparisons = new ArrayList<RequestedProcedure>(this.model.getComparisonStudies());
          this.model.updateModel(requestedProcedures);
          ComposedStudyListController.removeAll(oldActives, this.model.getActiveStudies());
-@@ -1432,6 +1481,29 @@
+@@ -1432,6 +1518,7 @@
          }
      }
  
-+    // NEW: Event subscriber for blending Added studies into main Comparison list
-+    @Subscriber(value={BlendAddedStudiesEvent.class})
-+    public void handleBlendAddedStudies(BlendAddedStudiesEvent event) {
-+        // Blend each study from the Added list into the main comparison list without filtering
-+        for (RequestedProcedure study : event.getStudies()) {
-+            if (!this.containsStudy(this.additionalComparisons, study) &&
-+                !this.containsStudy(this.model.getComparisonStudies(), study)) {
-+
-+                this.additionalComparisons.add(study);
-+
-+                // Update the main comparison model to show the blended study
-+                List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
-+                newComparisons.add(study);
-+                this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
-+
-+                // Update ReportingContext with all studies
-+                Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
-+                List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
-+                ReportingContext.setAllPatientProcedures(allStudies);
-+            }
-+        }
-+    }
 +
      public JComponent getView() {
          return null;
      }
-@@ -1504,4 +1576,4 @@
+@@ -1504,4 +1591,4 @@
              return date2.compareTo(date1);
          }
      }
