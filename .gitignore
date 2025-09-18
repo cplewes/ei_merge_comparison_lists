@@ -1,8 +1,10 @@
 # Dependencies
 libs/
 
-# Compiled output
+# Compiled output - generated artifacts
 build/classes/
+build/jars/
+*.jar
 
 # Temporary files
 temp/
@@ -12,3 +14,6 @@ temp/
 # Backup files
 *.backup
 *.bak
+
+# Generated diffs and output
+output/

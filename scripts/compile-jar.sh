@@ -14,11 +14,11 @@ PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 case "$JAR_ID" in
     lta)
-        SOURCE_DIR="$PROJECT_ROOT/build/lta/src"
+        SOURCE_DIR="$PROJECT_ROOT/src/lta/java"
         CLASSES_DIR="$PROJECT_ROOT/build/classes/lta"
         ;;
     added)
-        SOURCE_DIR="$PROJECT_ROOT/build/added/src"
+        SOURCE_DIR="$PROJECT_ROOT/src/added/java"
         CLASSES_DIR="$PROJECT_ROOT/build/classes/added"
         ;;
     *)

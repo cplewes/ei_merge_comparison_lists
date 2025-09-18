@@ -5,7 +5,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 ORIGINAL_DIR="$PROJECT_ROOT/original"
-BUILD_DIR="$PROJECT_ROOT/build"
+SRC_DIR="$PROJECT_ROOT/src"
 OUTPUT_DIR="$PROJECT_ROOT/output/diffs"
 
 # Colors for output
@@ -26,7 +26,7 @@ compare_file() {
     local jar_id="$1"
     local relative_path="$2"
     local original_file="$ORIGINAL_DIR/$jar_id/src/$relative_path"
-    local modified_file="$BUILD_DIR/$jar_id/src/$relative_path"
+    local modified_file="$SRC_DIR/$jar_id/java/$relative_path"
 
     if [ ! -f "$original_file" ]; then
         echo -e "${YELLOW}⚠️  Original not found: $relative_path${NC}"
@@ -68,19 +68,19 @@ compare_file() {
     fi
 }
 
-# Function to find all Java files in a JAR build directory
+# Function to find all Java files in a JAR source directory
 find_java_files() {
     local jar_id="$1"
-    local build_src="$BUILD_DIR/$jar_id/src"
+    local src_java="$SRC_DIR/$jar_id/java"
 
-    if [ ! -d "$build_src" ]; then
-        echo "No build directory found for $jar_id"
+    if [ ! -d "$src_java" ]; then
+        echo "No source directory found for $jar_id"
         return
     fi
 
-    find "$build_src" -name "*.java" -type f | while read -r file; do
+    find "$src_java" -name "*.java" -type f | while read -r file; do
         # Convert to relative path
-        echo "${file#$build_src/}"
+        echo "${file#$src_java/}"
     done
 }
 
@@ -93,7 +93,7 @@ echo
 
 # Check each JAR
 for jar_id in lta added; do
-    if [ -d "$BUILD_DIR/$jar_id/src" ]; then
+    if [ -d "$SRC_DIR/$jar_id/java" ]; then
         echo -e "${BLUE}=== JAR: $jar_id ===${NC}"
 
         while IFS= read -r relative_path; do
@@ -116,5 +116,5 @@ echo -e "Files unchanged: $((total_files - changed_files))"
 
 if [ $changed_files -gt 0 ]; then
     echo -e "\n${YELLOW}📁 Diff files saved in: ${OUTPUT_DIR#$PROJECT_ROOT/}${NC}"
-    echo -e "Use 'git diff --no-index original/ build/' for full comparison"
+    echo -e "Use 'git diff --no-index original/ src/' for full comparison"
 fi

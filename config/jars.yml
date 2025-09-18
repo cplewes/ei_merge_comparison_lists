@@ -6,7 +6,7 @@ jars:
     name: "LTA TextArea"
     description: "Main LTA textarea components including docks and study list controllers"
     filename: "com.agfa.ris.client.lta_3090.0.13.release_20250728.jar"
-    source_dir: "build/lta/src"
+    source_dir: "src/lta/java"
     classes_dir: "build/classes/lta"
     target_packages:
       - "com.agfa.ris.client.lta.textarea.docks"
@@ -19,7 +19,7 @@ jars:
     name: "Added Comparison Studies"
     description: "Added comparison studies functionality including search controllers"
     filename: "com.agfa.ris.client.studylist.lta.added_3090.0.13.release_20250728.jar"
-    source_dir: "build/added/src"
+    source_dir: "src/added/java"
     classes_dir: "build/classes/added"
     target_packages:
       - "com.agfa.ris.client.studylist.lta.added.searchscreen"
