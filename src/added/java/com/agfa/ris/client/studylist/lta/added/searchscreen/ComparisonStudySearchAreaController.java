@@ -83,19 +83,6 @@ extends AbstractComparisonSearchAreaController<RequestedProcedure> {
         if (Objects.nonNull(this.addedComparisonStudiesList)) {
             result = this.addedComparisonStudiesList.updateList(add2ComparisonStudiesEvent);
         }
-        // NEW: Blending Logic - Send event to trigger blending into main comparison list
-        // This ensures all Added studies also appear in the main Comparison list without filtering
-        if (result && !selectedStudies.isEmpty()) {
-            try {
-                // Send a global event to blend these studies into the main comparison list
-                com.agfa.hap.ext.mvp.AppContext.getCurrentContext().getGlobalEventBus()
-                    .sendEvent(new com.agfa.ris.client.lta.textarea.event.BlendAddedStudiesEvent(selectedStudies, !this.searchModel.isExternalMode()));
-            } catch (Exception e) {
-                // Log but don't fail the main operation if blending fails
-                System.err.println("Warning: Failed to send blend event: " + e.getMessage());
-            }
-        }
-
         if (result) {
             this.searchScreensController.getFrontController().clear();
         }

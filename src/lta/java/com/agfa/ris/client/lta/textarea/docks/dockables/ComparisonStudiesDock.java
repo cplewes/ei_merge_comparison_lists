@@ -20,8 +20,6 @@ import com.agfa.ris.client.lta.textarea.studylist.comparison.ComparisonAddedStud
 import com.agfa.ris.client.lta.textarea.studylist.comparison.ComparisonStudySearchAreaController;
 import com.agfa.ris.client.lta.textarea.studylist.comparison.ComparisonTeachingFileListController;
 import com.agfa.ris.client.lta.textarea.studylist.comparison.SearchLocationConfigureContext;
-import com.agfa.ris.client.lta.textarea.controller.DiagnosticOverviewController;
-import com.agfa.ris.client.lta.workspace.controller.DesktopControllerAccessor;
 import com.agfa.ris.client.platform.core.JRisPlatform;
 import com.agfa.ris.common.features.Feature;
 import com.agfa.ris.common.features.FeatureRouter;
@@ -83,44 +81,9 @@ implements MouseListener {
             return;
         }
         if (e.getSource() instanceof ComparisonStudiesDock) {
-            ComparisonStudiesDock dock = (ComparisonStudiesDock)e.getSource();
-
-            // NEW: If the currently selected tab is the main Comparison tab, trigger the same
-            // first-time Added search used when the Added tab is opened. This lets us blend the
-            // Added results into the Comparison list without requiring a user click.
-            if (dock.getSelectedDockable() instanceof ComparisonStudiesDockable) {
-                DiagnosticOverviewController diag =
-                        DesktopControllerAccessor.getDefaultInstance().getDiagnosticOverview();
-                if (diag != null) {
-                    ComparisonAddedStudyListController addedCtrl =
-                            diag.getComposedStudyListController().getComparisonAddedStudyListController();
-                    if (addedCtrl != null && addedCtrl.isFirstTrigger()) {
-                        final Patient patient = addedCtrl.getPrimaryPatient();
-                        SearchLocation searchLocation = SearchLocationConfigureContext.getInstance().getSearchLocation();
-                        if (searchLocation != null) {
-                            SearchLocationConfigureContext.getInstance().tryConnectLocation(
-                                    searchLocation,
-                                    true,
-                                    new SearchLocationConfigureContext.SearchLocationConnectedCallback(){
-                                        @Override
-                                        public void call() {
-                                            ComparisonStudiesDock.this.getSearchAreaController()
-                                                                          .retrieveAllStudiesByPatient(patient, true);
-                                        }
-                                    }
-                            );
-                            addedCtrl.setFirstTrigger(ComparisonAddedStudyListController.trigger.TRIGGERING);
-                        } else {
-                            Properties props = new Properties();
-                            props.put(FIRST_QUERY, addedCtrl.isFirstTrigger());
-                            ws.navigate("comparison.study.searcharea", props);
-                        }
-                    }
-                }
-            }
-
             ComparisonTeachingFileListDockable dockable;
             ComparisonTeachingFileListController listController;
+            ComparisonStudiesDock dock = (ComparisonStudiesDock)e.getSource();
             if (dock.getSelectedDockable() instanceof ComparisonStudiesAddedDockable) {
                 ComparisonStudiesAddedDockable dockable2 = (ComparisonStudiesAddedDockable)dock.getSelectedDockable();
                 ComparisonAddedStudyListController listController2 = dockable2.getStudyListController();

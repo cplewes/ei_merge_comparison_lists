@@ -63,7 +63,7 @@ import com.agfa.ris.client.lta.textarea.event.Add2TeachingFilesEvent;
 import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
 import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;
 import com.agfa.ris.client.lta.textarea.event.StudySelectionEvent;
-import com.agfa.ris.client.lta.textarea.event.BlendAddedStudiesEvent;
+import com.agfa.ris.client.lta.textarea.event.TriggerAutoSearchForAddedComparisonEvent;
 import com.agfa.ris.client.lta.textarea.event.UpdateStudyObjectListEvent;
 import com.agfa.ris.client.lta.textarea.overview.SelectedStudyModel;
 import com.agfa.ris.client.lta.textarea.reporting.ReportingContext;
@@ -484,7 +484,38 @@ implements IReportSeverityEditableObserver {
         for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
             c.setFirstTrigger(ComparisonAddedStudyListController.trigger.NOT_TRIGGERED_YET);
         }
+
+        // NEW: Auto-search for Added studies for the current patient to enable blending
+        // This replaces the complex event-based auto-triggering with a direct approach
+        if (!activeStudies.isEmpty()) {
+            Patient currentPatient = activeStudies.get(0).getPatient();
+            if (currentPatient != null) {
+                // Use the existing Added search mechanism to find studies for this patient
+                // This will trigger the existing addAddedComparison logic to blend results
+                this.triggerAddedStudySearchForPatient(currentPatient);
+            }
+        }
+
         AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
+    }
+
+    /**
+     * Triggers an Added study search for the specified patient to enable automatic blending
+     * of Added studies into the main comparison list.
+     */
+    private void triggerAddedStudySearchForPatient(Patient patient) {
+        try {
+            // Set the primary patient so the search uses the correct patient context
+            this.setPrimaryPatient(patient);
+
+            // Send the event to trigger Added study search (same mechanism as clicking Added tab)
+            AppContext.getCurrentContext().getGlobalEventBus()
+                .sendEvent(new TriggerAutoSearchForAddedComparisonEvent());
+
+        } catch (Exception e) {
+            // Don't fail the main comparison loading if Added search fails
+            LOGGER.warn("Failed to trigger Added study search for patient: " + patient, e);
+        }
     }
 
     private void setComparisonObservers() {
@@ -1481,28 +1512,6 @@ implements IReportSeverityEditableObserver {
         }
     }
 
-    // NEW: Event subscriber for blending Added studies into main Comparison list
-    @Subscriber(value={BlendAddedStudiesEvent.class})
-    public void handleBlendAddedStudies(BlendAddedStudiesEvent event) {
-        // Blend each study from the Added list into the main comparison list without filtering
-        for (RequestedProcedure study : event.getStudies()) {
-            if (!this.containsStudy(this.additionalComparisons, study) &&
-                !this.containsStudy(this.model.getComparisonStudies(), study)) {
-
-                this.additionalComparisons.add(study);
-
-                // Update the main comparison model to show the blended study
-                List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
-                newComparisons.add(study);
-                this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
-
-                // Update ReportingContext with all studies
-                Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
-                List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
-                ReportingContext.setAllPatientProcedures(allStudies);
-            }
-        }
-    }
 
     public JComponent getView() {
         return null;
