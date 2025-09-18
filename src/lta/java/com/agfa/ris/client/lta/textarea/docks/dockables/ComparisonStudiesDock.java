@@ -152,7 +152,20 @@ implements MouseListener {
     }
 
     void updateTitle(boolean isAllStudiesEnabled) {
-        this.getKey().setTitle(isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Title : Messages.ComparisonStudiesDockable_Title);
-        this.getKey().setName(isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Name : Messages.ComparisonStudiesDockable_Name);
+        String baseTitle = isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Title : Messages.ComparisonStudiesDockable_Title;
+        String baseName = isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Name : Messages.ComparisonStudiesDockable_Name;
+
+        // Add logging status to title for debugging
+        try {
+            String loggingStatus = com.agfa.ris.client.lta.textarea.studylist.ComposedStudyListController.getFileLoggingStatus();
+            if (!loggingStatus.equals("File logging OK")) {
+                baseTitle = baseTitle + " [LOG: " + loggingStatus.substring(0, Math.min(30, loggingStatus.length())) + "]";
+            }
+        } catch (Exception e) {
+            // Ignore errors in status display
+        }
+
+        this.getKey().setTitle(baseTitle);
+        this.getKey().setName(baseName);
     }
 }

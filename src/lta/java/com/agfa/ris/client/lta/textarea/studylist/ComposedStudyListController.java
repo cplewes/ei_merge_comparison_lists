@@ -154,6 +154,10 @@ implements IReportSeverityEditableObserver {
         this.comparisons = new ArrayList<ComparisonStudyListController>();
         this.comparisonAddedList = Lists.newArrayList();
         this.tceList = Lists.newArrayList();
+
+        // Test logging system on initialization
+        this.logDebug("EI_DEBUG: ComposedStudyListController initialized - testing file logging");
+
         this.init(selectedStudyModel);
     }
 
@@ -537,23 +541,58 @@ implements IReportSeverityEditableObserver {
         return collection.stream().map(RequestedProcedure::getPrimaryKey).anyMatch(pk -> pk.equals(study.getPrimaryKey()));
     }
 
+    private static String lastFileError = null;
+    private static int fileErrorCount = 0;
+
     private synchronized void logToFile(String message) {
+        String logPath = "C:\\ProgramData\\AGFA\\IMPAX Agility\\ei_log.txt";
         try {
-            java.io.FileWriter writer = new java.io.FileWriter("H:\\ei_log.txt", true);
+            // Ensure directory exists
+            java.io.File logFile = new java.io.File(logPath);
+            java.io.File parentDir = logFile.getParentFile();
+            if (parentDir != null && !parentDir.exists()) {
+                parentDir.mkdirs();
+            }
+
+            java.io.FileWriter writer = new java.io.FileWriter(logPath, true);
             java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
             String timestamp = sdf.format(new java.util.Date());
             String threadName = Thread.currentThread().getName();
-            writer.write("[" + timestamp + "] [" + threadName + "] " + message + "\n");
+            String logEntry = "[" + timestamp + "] [" + threadName + "] " + message + "\n";
+            writer.write(logEntry);
             writer.close();
+
+            // Console fallback for immediate verification
+            System.out.println("EI_LOG: " + logEntry.trim());
+
+            // Reset error tracking on success
+            lastFileError = null;
+            fileErrorCount = 0;
+
         } catch (Exception e) {
-            // Fallback to regular logger if file logging fails
-            LOGGER.error("Failed to write to H:\\ei_log.txt: " + e.getMessage());
+            fileErrorCount++;
+            String errorDetails = "Failed to write to " + logPath + ": " + e.getClass().getSimpleName() + ": " + e.getMessage();
+            lastFileError = errorDetails;
+
+            // Fallback to regular logger and console
+            LOGGER.error(errorDetails);
+            System.err.println("EI_LOG_ERROR: " + errorDetails);
+            System.out.println("EI_LOG_FALLBACK: " + message);
         }
+    }
+
+    public static String getFileLoggingStatus() {
+        if (lastFileError == null) {
+            return "File logging OK";
+        }
+        return "File logging failed (" + fileErrorCount + "x): " + lastFileError;
     }
 
     private void logDebug(String message) {
         LOGGER.info(message);
         this.logToFile(message);
+        // Always output to console for immediate verification
+        System.out.println("EI_DEBUG_CONSOLE: " + message);
     }
 
     private void logStudyDetails(String prefix, RequestedProcedure study) {
