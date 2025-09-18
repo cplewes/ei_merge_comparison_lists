@@ -15,5 +15,4 @@ temp/
 *.backup
 *.bak
 
-# Generated diffs (but keep rebuilt JARs in git)
-output/diffs/
+# Generated diffs are now tracked for comparison history
