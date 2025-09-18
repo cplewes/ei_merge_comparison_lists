@@ -537,18 +537,41 @@ implements IReportSeverityEditableObserver {
         return collection.stream().map(RequestedProcedure::getPrimaryKey).anyMatch(pk -> pk.equals(study.getPrimaryKey()));
     }
 
+    private synchronized void logToFile(String message) {
+        try {
+            java.io.FileWriter writer = new java.io.FileWriter("H:\\ei_log.txt", true);
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+            String timestamp = sdf.format(new java.util.Date());
+            String threadName = Thread.currentThread().getName();
+            writer.write("[" + timestamp + "] [" + threadName + "] " + message + "\n");
+            writer.close();
+        } catch (Exception e) {
+            // Fallback to regular logger if file logging fails
+            LOGGER.error("Failed to write to H:\\ei_log.txt: " + e.getMessage());
+        }
+    }
+
+    private void logDebug(String message) {
+        LOGGER.info(message);
+        this.logToFile(message);
+    }
+
     private void logStudyDetails(String prefix, RequestedProcedure study) {
         if (study == null) {
-            LOGGER.info(prefix + ": Study is null");
+            String message = prefix + ": Study is null";
+            LOGGER.info(message);
+            this.logToFile(message);
             return;
         }
-        LOGGER.info(prefix + ": StudyUID=" + study.getStudyUID() +
+        String message = prefix + ": StudyUID=" + study.getStudyUID() +
                    ", AeCode=" + study.getAeCode() +
                    ", AeTitle=" + study.getAeTitle() +
                    ", PrimaryKey=" + study.getPrimaryKey() +
                    ", Location=" + study.getLocation() +
                    ", SearchLocation=" + (study.getSearchLocation() != null ? study.getSearchLocation().getLocationName() : "null") +
-                   ", External=" + study.isExternal());
+                   ", External=" + study.isExternal();
+        LOGGER.info(message);
+        this.logToFile(message);
     }
 
     public void mergeComparisons(List<RequestedProcedure> comparisons, boolean isTask) {
@@ -815,9 +838,9 @@ implements IReportSeverityEditableObserver {
     }
 
     private void addAddedComparison(RequestedProcedure requestedProcedure, String selectedStudyUID, boolean isLocal) {
-        LOGGER.info("=== DEBUG: addAddedComparison() called ===");
-        this.logStudyDetails("DEBUG: Processing study", requestedProcedure);
-        LOGGER.info("DEBUG: selectedStudyUID=" + selectedStudyUID + ", isLocal=" + isLocal);
+        this.logDebug("=== EI_DEBUG: addAddedComparison() called ===");
+        this.logStudyDetails("EI_DEBUG: Processing study", requestedProcedure);
+        this.logDebug("EI_DEBUG: selectedStudyUID=" + selectedStudyUID + ", isLocal=" + isLocal);
 
         if (LOCAL.equals(requestedProcedure.getAeCode())) {
             LOGGER.info("DEBUG: Study has LOCAL AeCode, checking for existing comparison study");
@@ -845,15 +868,15 @@ implements IReportSeverityEditableObserver {
         // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
         // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
         // Use direct addition to additionalComparisons to avoid filterByProcedureStatus() that excludes external studies
-        LOGGER.info("DEBUG: Starting blending logic for main comparison list");
-        LOGGER.info("DEBUG: Current additionalComparisons size: " + this.additionalComparisons.size());
-        LOGGER.info("DEBUG: Current comparisonStudies size: " + this.model.getComparisonStudies().size());
+        this.logDebug("EI_DEBUG: Starting blending logic for main comparison list");
+        this.logDebug("EI_DEBUG: Current additionalComparisons size: " + this.additionalComparisons.size());
+        this.logDebug("EI_DEBUG: Current comparisonStudies size: " + this.model.getComparisonStudies().size());
 
         boolean inAdditionalComparisons = this.containsStudy(this.additionalComparisons, requestedProcedure);
         boolean inComparisonStudies = this.containsStudy(this.model.getComparisonStudies(), requestedProcedure);
 
-        LOGGER.info("DEBUG: Study already in additionalComparisons: " + inAdditionalComparisons);
-        LOGGER.info("DEBUG: Study already in comparisonStudies: " + inComparisonStudies);
+        this.logDebug("EI_DEBUG: Study already in additionalComparisons: " + inAdditionalComparisons);
+        this.logDebug("EI_DEBUG: Study already in comparisonStudies: " + inComparisonStudies);
 
         if (inAdditionalComparisons) {
             LOGGER.info("DEBUG: Study found in additionalComparisons - checking primary keys:");
@@ -876,7 +899,7 @@ implements IReportSeverityEditableObserver {
         }
 
         if (!inAdditionalComparisons && !inComparisonStudies) {
-            LOGGER.info("DEBUG: Study not found in either collection - adding to blended list");
+            this.logDebug("EI_DEBUG: Study not found in either collection - adding to blended list");
             this.additionalComparisons.add(requestedProcedure);
             LOGGER.info("DEBUG: additionalComparisons size after add: " + this.additionalComparisons.size());
 
@@ -905,12 +928,12 @@ implements IReportSeverityEditableObserver {
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
             LOGGER.info("DEBUG: Triggered tab title updates for all comparisons");
 
-            LOGGER.info("DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
+            this.logDebug("EI_DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
         } else {
-            LOGGER.info("DEBUG: Study already exists in collections - skipping blending");
+            this.logDebug("EI_DEBUG: Study already exists in collections - skipping blending");
         }
 
-        LOGGER.info("=== DEBUG: addAddedComparison() completed ===");
+        this.logDebug("=== EI_DEBUG: addAddedComparison() completed ===");
     }
 
     private void showWarnDialog() {
