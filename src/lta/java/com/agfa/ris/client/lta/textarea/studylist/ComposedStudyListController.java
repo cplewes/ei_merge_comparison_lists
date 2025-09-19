@@ -107,6 +107,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -671,10 +672,18 @@ implements IReportSeverityEditableObserver {
             this.logToFile(message);
             return;
         }
+
+        String primaryKey;
+        try {
+            primaryKey = study.getPrimaryKey().toString();
+        } catch (IllegalStateException e) {
+            primaryKey = "N/A (external)";
+        }
+
         String message = prefix + ": StudyUID=" + study.getStudyUID() +
                    ", AeCode=" + study.getAeCode() +
                    ", AeTitle=" + study.getAeTitle() +
-                   ", PrimaryKey=" + study.getPrimaryKey() +
+                   ", PrimaryKey=" + primaryKey +
                    ", Location=" + study.getLocation() +
                    ", SearchLocation=" + (study.getSearchLocation() != null ? study.getSearchLocation().getLocationName() : "null") +
                    ", External=" + study.isExternal();
@@ -688,12 +697,12 @@ implements IReportSeverityEditableObserver {
         this.setDockableComparisonsLoaded(true);
         this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
         if (this.model.getActiveStudies().isEmpty()) {
-            this.additionalComparisons.addAll(comparisonsToMerge.stream().filter(comp -> this.additionalComparisons.stream().noneMatch(existingComp -> existingComp.getPrimaryKey().equals(comp.getPrimaryKey()))).collect(Collectors.toList()));
+            this.additionalComparisons.addAll(comparisonsToMerge.stream().filter(comp -> this.additionalComparisons.stream().noneMatch(existingComp -> Objects.equals(this.safeGetPrimaryKey(existingComp), this.safeGetPrimaryKey(comp)))).collect(Collectors.toList()));
             return;
         }
         this.additionalComparisons.clear();
-        List comparisonsToRetain = this.model.getComparisonStudies().stream().filter(existingComparison -> comparisonsToMerge.stream().noneMatch(toMerge -> toMerge.getPrimaryKey().equals(existingComparison.getPrimaryKey()))).collect(Collectors.toList());
-        List comparisonsToRetire = this.model.getComparisonStudies().stream().filter(existingComparison -> comparisonsToMerge.stream().anyMatch(toMerge -> toMerge.getPrimaryKey().equals(existingComparison.getPrimaryKey()))).collect(Collectors.toList());
+        List comparisonsToRetain = this.model.getComparisonStudies().stream().filter(existingComparison -> comparisonsToMerge.stream().noneMatch(toMerge -> Objects.equals(this.safeGetPrimaryKey(toMerge), this.safeGetPrimaryKey(existingComparison)))).collect(Collectors.toList());
+        List comparisonsToRetire = this.model.getComparisonStudies().stream().filter(existingComparison -> comparisonsToMerge.stream().anyMatch(toMerge -> Objects.equals(this.safeGetPrimaryKey(toMerge), this.safeGetPrimaryKey(existingComparison)))).collect(Collectors.toList());
         ArrayList<RequestedProcedure> newComparisons = new ArrayList<RequestedProcedure>(comparisonsToMerge);
         newComparisons.addAll(comparisonsToRetain);
         this.model.refillModel(new ArrayList<RequestedProcedure>(this.model.getActiveStudies()), newComparisons);
@@ -1697,7 +1706,7 @@ implements IReportSeverityEditableObserver {
 
     private void removeDeletedStudy(RequestedProcedure requestedProcedure) {
         String studyUid;
-        List<RequestedProcedure> comparisonsToRetain = this.model.getComparisonStudies().stream().filter(existingComparison -> !existingComparison.getPrimaryKey().equals(requestedProcedure.getPrimaryKey()) && !existingComparison.getStudyUID().equals(requestedProcedure.getStudyUID())).collect(Collectors.toList());
+        List<RequestedProcedure> comparisonsToRetain = this.model.getComparisonStudies().stream().filter(existingComparison -> !Objects.equals(this.safeGetPrimaryKey(existingComparison), this.safeGetPrimaryKey(requestedProcedure)) && !existingComparison.getStudyUID().equals(requestedProcedure.getStudyUID())).collect(Collectors.toList());
         if (comparisonsToRetain.size() != this.model.getComparisonStudies().size()) {
             this.model.refillModel(new ArrayList<RequestedProcedure>(this.model.getActiveStudies()), comparisonsToRetain);
         }
