@@ -855,15 +855,12 @@ implements IReportSeverityEditableObserver {
         final boolean isLocal = event.isLocal();
         this.logDebug("EI_TRACE: Processing Add2ComparisonStudiesEvent - isLocal: " + isLocal + ", selectedStudies count: " + event.getSelectedStudies().size());
 
-        // Use simple deduplication instead of aggressive canBeAdded() filtering
-        // This matches the original addAddedComparison behavior which has no filtering
-        // Use StudyUID-based deduplication instead of containsStudy() to avoid primary key exceptions on external studies
+        // Remove all filtering to match original addAddedComparison behavior which has zero filtering
+        // AGFA has already processed these studies, so trust their selection and process all of them
         final List<RequestedProcedure> sortList = event.getSelectedStudies().stream()
-            .filter(rp -> !this.addedComparisonStudies.stream()
-                .anyMatch(existing -> existing.getStudyUID().equals(((RequestedProcedure)rp).getStudyUID())))
             .sorted(ComposedStudyListController.getRequestedProcedureComparator())
             .collect(Collectors.toList());
-        this.logDebug("EI_TRACE: After deduplication and sorting - sortList count: " + sortList.size());
+        this.logDebug("EI_TRACE: After sorting - processing all " + sortList.size() + " studies (no filtering)");
         if (sortList.isEmpty()) {
             this.logDebug("EI_TRACE: sortList is empty - no studies to add");
             if (event.isNeedCompareImages()) {
