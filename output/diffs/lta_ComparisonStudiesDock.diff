@@ -1,8 +1,26 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/docks/dockables/ComparisonStudiesDock.java	2025-09-17 14:56:39.203973339 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/docks/dockables/ComparisonStudiesDock.java	2025-09-18 10:01:51.322574595 -0600
-@@ -155,4 +155,4 @@
-         this.getKey().setTitle(isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Title : Messages.ComparisonStudiesDockable_Title);
-         this.getKey().setName(isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Name : Messages.ComparisonStudiesDockable_Name);
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/docks/dockables/ComparisonStudiesDock.java	2025-09-18 15:53:33.426391778 -0600
+@@ -152,7 +152,20 @@
+     }
+ 
+     void updateTitle(boolean isAllStudiesEnabled) {
+-        this.getKey().setTitle(isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Title : Messages.ComparisonStudiesDockable_Title);
+-        this.getKey().setName(isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Name : Messages.ComparisonStudiesDockable_Name);
++        String baseTitle = isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Title : Messages.ComparisonStudiesDockable_Title;
++        String baseName = isAllStudiesEnabled ? Messages.ComparisonStudiesDockableAllStudies_Name : Messages.ComparisonStudiesDockable_Name;
++
++        // Add logging status to title for debugging
++        try {
++            String loggingStatus = com.agfa.ris.client.lta.textarea.studylist.ComposedStudyListController.getFileLoggingStatus();
++            if (!loggingStatus.equals("File logging OK")) {
++                baseTitle = baseTitle + " [LOG: " + loggingStatus.substring(0, Math.min(30, loggingStatus.length())) + "]";
++            }
++        } catch (Exception e) {
++            // Ignore errors in status display
++        }
++
++        this.getKey().setTitle(baseTitle);
++        this.getKey().setName(baseName);
      }
 -}
 \ No newline at end of file

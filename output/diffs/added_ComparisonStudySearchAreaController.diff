@@ -1,6 +1,6 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/added/src/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java	2025-09-17 14:25:38.999865582 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/src/added/java/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java	2025-09-18 10:02:08.159284417 -0600
-@@ -1,116 +1,116 @@
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/added/java/com/agfa/ris/client/studylist/lta/added/searchscreen/ComparisonStudySearchAreaController.java	2025-09-19 10:35:00.312679556 -0600
+@@ -1,116 +1,124 @@
 -package com.agfa.ris.client.studylist.lta.added.searchscreen;
 -
 -import com.agfa.hap.ext.Assert;
@@ -119,6 +119,9 @@
 +package com.agfa.ris.client.studylist.lta.added.searchscreen;
 +
 +import com.agfa.hap.ext.Assert;
++import com.agfa.hap.ext.mvp.AppContext;
++import com.agfa.hap.ext.mvp.event.GlobalBus;
++import com.agfa.hap.ext.mvp.event.IEvent;
 +import com.agfa.hap.ext.tableconfig.TableConfigSetupService;
 +import com.agfa.ris.client.domainmodel.ris.IAttachmentOwner;
 +import com.agfa.ris.client.domainmodel.ris.RequestedProcedure;
@@ -142,6 +145,7 @@
 +    private static final String TOP_TOOLBAR_ID = "comparison.studies";
 +    private static final String COMPARISON_STUDIES_SEARCH_DEFINITION = "_comparison_study_search";
 +    public static final String identifier = "comparison.study.searcharea";
++    private static final GlobalBus globalEventBus = AppContext.getCurrentContext().getGlobalEventBus();
 +    protected ComparisonStudySearchModel<RequestedProcedure> searchModel;
 +    private AddedComparisonStudiesList addedComparisonStudiesList;
 +    AtomicReference<Function<Add2ComparisonStudiesEvent, Boolean>> callback = new AtomicReference<Function<Add2ComparisonStudiesEvent, Boolean>>();
@@ -201,6 +205,10 @@
 +        if (Objects.nonNull(this.addedComparisonStudiesList)) {
 +            result = this.addedComparisonStudiesList.updateList(add2ComparisonStudiesEvent);
 +        }
++
++        // Send event globally for blending functionality
++        globalEventBus.sendEvent((IEvent)add2ComparisonStudiesEvent);
++
 +        if (result) {
 +            this.searchScreensController.getFrontController().clear();
 +        }

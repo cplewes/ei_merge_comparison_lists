@@ -63,7 +63,6 @@ import com.agfa.ris.client.lta.textarea.event.Add2TeachingFilesEvent;
 import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
 import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;
 import com.agfa.ris.client.lta.textarea.event.StudySelectionEvent;
-import com.agfa.ris.client.lta.textarea.event.TriggerAutoSearchForAddedComparisonEvent;
 import com.agfa.ris.client.lta.textarea.event.UpdateStudyObjectListEvent;
 import com.agfa.ris.client.lta.textarea.overview.SelectedStudyModel;
 import com.agfa.ris.client.lta.textarea.reporting.ReportingContext;
@@ -511,12 +510,9 @@ implements IReportSeverityEditableObserver {
             Patient currentPatient = activeStudies.get(0).getPatient();
             this.logDebug("EI_TRACE: Got patient from first active study - patient null: " + (currentPatient == null));
             if (currentPatient != null) {
-                this.logDebug("EI_TRACE: Patient found - " + currentPatient.toString() + " - triggering Added search");
-                // Use the existing Added search mechanism to find studies for this patient
-                // This will trigger the existing addAddedComparison logic to blend results
-                this.triggerAddedStudySearchForPatient(currentPatient);
+                this.logDebug("EI_TRACE: Patient found - " + currentPatient.toString() + " - Added search will be triggered automatically by AGFA system");
             } else {
-                this.logDebug("EI_TRACE: Patient is null - skipping Added search");
+                this.logDebug("EI_TRACE: Patient is null - no patient context for Added search");
             }
         } else {
             this.logDebug("EI_TRACE: No active studies - skipping Added search");
@@ -531,30 +527,6 @@ implements IReportSeverityEditableObserver {
         }
     }
 
-    /**
-     * Triggers an Added study search for the specified patient to enable automatic blending
-     * of Added studies into the main comparison list.
-     */
-    private void triggerAddedStudySearchForPatient(Patient patient) {
-        this.logDebug("EI_TRACE: triggerAddedStudySearchForPatient() called for patient: " + patient);
-        try {
-            // Set the primary patient so the search uses the correct patient context
-            this.setPrimaryPatient(patient);
-            this.logDebug("EI_TRACE: Set primary patient successfully");
-
-            // Send the event to trigger Added study search (same mechanism as clicking Added tab)
-            this.logDebug("EI_TRACE: Sending TriggerAutoSearchForAddedComparisonEvent");
-            AppContext.getCurrentContext().getGlobalEventBus()
-                .sendEvent(new TriggerAutoSearchForAddedComparisonEvent());
-            this.logDebug("EI_TRACE: TriggerAutoSearchForAddedComparisonEvent sent successfully");
-
-        } catch (Exception e) {
-            // Don't fail the main comparison loading if Added search fails
-            String errorMsg = "Failed to trigger Added study search for patient: " + patient + " - " + e.getClass().getSimpleName() + ": " + e.getMessage();
-            LOGGER.warn(errorMsg, e);
-            this.logDebug("EI_TRACE: Exception in triggerAddedStudySearchForPatient: " + errorMsg);
-        }
-    }
 
     private void setComparisonObservers() {
         for (final RequestedProcedure cmp : this.getModel().getComparisonStudies()) {

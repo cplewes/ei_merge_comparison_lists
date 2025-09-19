@@ -1,6 +1,9 @@
 package com.agfa.ris.client.studylist.lta.added.searchscreen;
 
 import com.agfa.hap.ext.Assert;
+import com.agfa.hap.ext.mvp.AppContext;
+import com.agfa.hap.ext.mvp.event.GlobalBus;
+import com.agfa.hap.ext.mvp.event.IEvent;
 import com.agfa.hap.ext.tableconfig.TableConfigSetupService;
 import com.agfa.ris.client.domainmodel.ris.IAttachmentOwner;
 import com.agfa.ris.client.domainmodel.ris.RequestedProcedure;
@@ -24,6 +27,7 @@ extends AbstractComparisonSearchAreaController<RequestedProcedure> {
     private static final String TOP_TOOLBAR_ID = "comparison.studies";
     private static final String COMPARISON_STUDIES_SEARCH_DEFINITION = "_comparison_study_search";
     public static final String identifier = "comparison.study.searcharea";
+    private static final GlobalBus globalEventBus = AppContext.getCurrentContext().getGlobalEventBus();
     protected ComparisonStudySearchModel<RequestedProcedure> searchModel;
     private AddedComparisonStudiesList addedComparisonStudiesList;
     AtomicReference<Function<Add2ComparisonStudiesEvent, Boolean>> callback = new AtomicReference<Function<Add2ComparisonStudiesEvent, Boolean>>();
@@ -83,6 +87,10 @@ extends AbstractComparisonSearchAreaController<RequestedProcedure> {
         if (Objects.nonNull(this.addedComparisonStudiesList)) {
             result = this.addedComparisonStudiesList.updateList(add2ComparisonStudiesEvent);
         }
+
+        // Send event globally for blending functionality
+        globalEventBus.sendEvent((IEvent)add2ComparisonStudiesEvent);
+
         if (result) {
             this.searchScreensController.getFrontController().clear();
         }

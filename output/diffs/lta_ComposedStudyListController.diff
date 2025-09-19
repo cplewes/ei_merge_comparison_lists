@@ -1,14 +1,29 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 14:53:51.381378368 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-18 14:36:01.265735474 -0600
-@@ -63,6 +63,7 @@
- import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
- import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;
- import com.agfa.ris.client.lta.textarea.event.StudySelectionEvent;
-+import com.agfa.ris.client.lta.textarea.event.TriggerAutoSearchForAddedComparisonEvent;
- import com.agfa.ris.client.lta.textarea.event.UpdateStudyObjectListEvent;
- import com.agfa.ris.client.lta.textarea.overview.SelectedStudyModel;
- import com.agfa.ris.client.lta.textarea.reporting.ReportingContext;
-@@ -280,7 +281,7 @@
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-19 10:35:42.541869149 -0600
+@@ -153,6 +153,22 @@
+         this.comparisons = new ArrayList<ComparisonStudyListController>();
+         this.comparisonAddedList = Lists.newArrayList();
+         this.tceList = Lists.newArrayList();
++
++        // Test logging system on initialization
++        this.logDebug("EI_DEBUG: ComposedStudyListController initialized - testing file logging");
++
++        // Test logging from background thread to verify threading works
++        Thread testThread = new Thread(() -> {
++            try {
++                Thread.sleep(100); // Small delay to distinguish from EDT
++                this.logDebug("EI_DEBUG: Background thread logging test");
++            } catch (InterruptedException e) {
++                System.err.println("EI_DEBUG: Thread test interrupted");
++            }
++        });
++        testThread.setName("EI-LogTest-Thread");
++        testThread.start();
++
+         this.init(selectedStudyModel);
+     }
+ 
+@@ -280,7 +296,7 @@
                  others.add(activeStudyListController);
              }
          } else {
@@ -17,69 +32,169 @@
              allComparisons.addAll(this.comparisons);
              allComparisons.addAll(this.comparisonAddedList);
              allComparisons.addAll(this.tceList);
-@@ -483,9 +484,40 @@
+@@ -459,9 +475,12 @@
+     }
+ 
+     public void display(IAdaptable domainModel) {
+-        StudyListData studyListData = (StudyListData)domainModel.getAdapter(StudyListData.class);
+-        List<RequestedProcedure> activeStudies = studyListData.getActiveStudies();
+-        List<RequestedProcedure> comparisonStudies = this.filterByProcedureStatus(studyListData.getRelevantStudies());
++        try {
++            this.logDebug("EI_TRACE: display() method called");
++            StudyListData studyListData = (StudyListData)domainModel.getAdapter(StudyListData.class);
++            List<RequestedProcedure> activeStudies = studyListData.getActiveStudies();
++            this.logDebug("EI_TRACE: display() - activeStudies count: " + activeStudies.size());
++            List<RequestedProcedure> comparisonStudies = this.filterByProcedureStatus(studyListData.getRelevantStudies());
+         this.additionalComparisons.removeIf(s -> this.containsStudy((Collection<RequestedProcedure>)activeStudies, (RequestedProcedure)s));
+         SplitMergeHandlerWrapper handlerWrapper = studyListData.getSplitMergeHandler();
+         boolean isTask = studyListData.isTask();
+@@ -483,9 +502,32 @@
          for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
              c.setFirstTrigger(ComparisonAddedStudyListController.trigger.NOT_TRIGGERED_YET);
          }
+-        AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
 +
 +        // NEW: Auto-search for Added studies for the current patient to enable blending
 +        // This replaces the complex event-based auto-triggering with a direct approach
++        this.logDebug("EI_TRACE: Checking if should trigger Added search - activeStudies.isEmpty(): " + activeStudies.isEmpty());
 +        if (!activeStudies.isEmpty()) {
 +            Patient currentPatient = activeStudies.get(0).getPatient();
++            this.logDebug("EI_TRACE: Got patient from first active study - patient null: " + (currentPatient == null));
 +            if (currentPatient != null) {
-+                // Use the existing Added search mechanism to find studies for this patient
-+                // This will trigger the existing addAddedComparison logic to blend results
-+                this.triggerAddedStudySearchForPatient(currentPatient);
++                this.logDebug("EI_TRACE: Patient found - " + currentPatient.toString() + " - Added search will be triggered automatically by AGFA system");
++            } else {
++                this.logDebug("EI_TRACE: Patient is null - no patient context for Added search");
 +            }
++        } else {
++            this.logDebug("EI_TRACE: No active studies - skipping Added search");
 +        }
 +
-         AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
++            AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
++        } catch (Exception e) {
++            String errorMsg = "Exception in display() method: " + e.getClass().getSimpleName() + ": " + e.getMessage();
++            this.logDebug("EI_TRACE: " + errorMsg);
++            LOGGER.error(errorMsg, e);
++            throw e;  // Re-throw to maintain existing behavior
++        }
      }
  
-+    /**
-+     * Triggers an Added study search for the specified patient to enable automatic blending
-+     * of Added studies into the main comparison list.
-+     */
-+    private void triggerAddedStudySearchForPatient(Patient patient) {
-+        try {
-+            // Set the primary patient so the search uses the correct patient context
-+            this.setPrimaryPatient(patient);
-+
-+            // Send the event to trigger Added study search (same mechanism as clicking Added tab)
-+            AppContext.getCurrentContext().getGlobalEventBus()
-+                .sendEvent(new TriggerAutoSearchForAddedComparisonEvent());
-+
-+        } catch (Exception e) {
-+            // Don't fail the main comparison loading if Added search fails
-+            LOGGER.warn("Failed to trigger Added study search for patient: " + patient, e);
-+        }
-+    }
 +
      private void setComparisonObservers() {
          for (final RequestedProcedure cmp : this.getModel().getComparisonStudies()) {
              XObserver displayStatusObserver = new XObserver(){
-@@ -505,6 +537,20 @@
+@@ -505,6 +547,111 @@
          return collection.stream().map(RequestedProcedure::getPrimaryKey).anyMatch(pk -> pk.equals(study.getPrimaryKey()));
      }
  
++    private static String lastFileError = null;
++    private static int fileErrorCount = 0;
++
++    private synchronized void logToFile(String message) {
++        String logPath = "C:\\ProgramData\\AGFA\\IMPAX Agility\\ei_log.txt";
++
++        // Always log to console first for immediate visibility
++        String threadName = Thread.currentThread().getName();
++        String threadId = String.valueOf(Thread.currentThread().getId());
++        boolean isEDT = javax.swing.SwingUtilities.isEventDispatchThread();
++        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new java.util.Date());
++
++        // Enhanced console logging with thread details
++        String consoleEntry = "[" + timestamp + "] [" + threadName + "-" + threadId + "] [EDT:" + isEDT + "] " + message;
++        System.out.println("EI_LOG_CONSOLE: " + consoleEntry);
++        System.out.flush(); // Force immediate output
++
++        try {
++            // Ensure directory exists
++            java.io.File logFile = new java.io.File(logPath);
++            java.io.File parentDir = logFile.getParentFile();
++            if (parentDir != null && !parentDir.exists()) {
++                boolean dirCreated = parentDir.mkdirs();
++                System.out.println("EI_LOG_CONSOLE: Directory creation result: " + dirCreated);
++            }
++
++            // Use try-with-resources for better file handling
++            try (java.io.FileWriter writer = new java.io.FileWriter(logPath, true)) {
++                String logEntry = consoleEntry + "\n";
++                writer.write(logEntry);
++                writer.flush(); // Force immediate write
++            }
++
++            // Reset error tracking on success
++            lastFileError = null;
++            fileErrorCount = 0;
++
++        } catch (Exception e) {
++            fileErrorCount++;
++            String errorDetails = "Failed to write to " + logPath + " from thread " + threadName + ": " + e.getClass().getSimpleName() + ": " + e.getMessage();
++            lastFileError = errorDetails;
++
++            // Multiple fallback channels
++            System.err.println("EI_LOG_ERROR: " + errorDetails);
++            System.err.flush();
++            System.out.println("EI_LOG_FALLBACK: " + consoleEntry);
++            System.out.flush();
++
++            // Try regular logger as final fallback
++            try {
++                LOGGER.error(errorDetails);
++            } catch (Exception loggerEx) {
++                System.err.println("EI_LOG_CRITICAL: Even LOGGER failed: " + loggerEx.getMessage());
++            }
++        }
++    }
++
++    public static String getFileLoggingStatus() {
++        if (lastFileError == null) {
++            return "File logging OK";
++        }
++        return "File logging failed (" + fileErrorCount + "x): " + lastFileError;
++    }
++
++    private void logDebug(String message) {
++        String threadInfo = Thread.currentThread().getName() + "-" + Thread.currentThread().getId();
++        boolean isEDT = javax.swing.SwingUtilities.isEventDispatchThread();
++        String enhancedMessage = message + " [THREAD:" + threadInfo + ",EDT:" + isEDT + "]";
++
++        // Always log to console FIRST with thread details
++        System.out.println("EI_DEBUG_CONSOLE: " + enhancedMessage);
++        System.out.flush();
++
++        // Then try other channels
++        try {
++            LOGGER.info(enhancedMessage);
++        } catch (Exception e) {
++            System.err.println("EI_DEBUG_ERROR: LOGGER.info failed: " + e.getMessage());
++        }
++
++        try {
++            this.logToFile(message); // Original message to file, enhanced to console
++        } catch (Exception e) {
++            System.err.println("EI_DEBUG_ERROR: logToFile failed: " + e.getMessage());
++        }
++    }
++
 +    private void logStudyDetails(String prefix, RequestedProcedure study) {
 +        if (study == null) {
-+            LOGGER.info(prefix + ": Study is null");
++            String message = prefix + ": Study is null";
++            LOGGER.info(message);
++            this.logToFile(message);
 +            return;
 +        }
-+        LOGGER.info(prefix + ": StudyUID=" + study.getStudyUID() +
++        String message = prefix + ": StudyUID=" + study.getStudyUID() +
 +                   ", AeCode=" + study.getAeCode() +
 +                   ", AeTitle=" + study.getAeTitle() +
 +                   ", PrimaryKey=" + study.getPrimaryKey() +
 +                   ", Location=" + study.getLocation() +
 +                   ", SearchLocation=" + (study.getSearchLocation() != null ? study.getSearchLocation().getLocationName() : "null") +
-+                   ", External=" + study.isExternal());
++                   ", External=" + study.isExternal();
++        LOGGER.info(message);
++        this.logToFile(message);
 +    }
 +
      public void mergeComparisons(List<RequestedProcedure> comparisons, boolean isTask) {
          this.setAdditionalComparisonsLoaded(true);
          List<RequestedProcedure> comparisonsToMerge = this.filterByProcedureStatus(comparisons);
-@@ -520,8 +566,8 @@
+@@ -520,8 +667,8 @@
          ArrayList<RequestedProcedure> newComparisons = new ArrayList<RequestedProcedure>(comparisonsToMerge);
          newComparisons.addAll(comparisonsToRetain);
          this.model.refillModel(new ArrayList<RequestedProcedure>(this.model.getActiveStudies()), newComparisons);
@@ -90,7 +205,7 @@
          ReportingContext.setAllPatientProcedures(allStudies);
          this.performUpdates(this.model.getActiveStudies(), new HashSet<RequestedProcedure>(this.model.getActiveStudies()), new HashSet<RequestedProcedure>(comparisonsToRetire), this.model.getComparisonStudies(), this.splitMergeHandler, isTask);
          this.selectedComparisonDockable(StudyModule.Comparison);
-@@ -579,7 +625,9 @@
+@@ -579,7 +726,9 @@
              this.notifyAddToStudyListeners(activeRequestedProcedure);
              activeStudies.add(activeStudy);
          }
@@ -101,7 +216,30 @@
              this.getActiveStudiesController().getImageAreaGateway().addStudiesToSidebar((Collection<RequestedProcedure>)newActives, true, this.model.areLocalStudies());
          }
          for (RequestedProcedure comparisonRequestedProcedure : comparisons) {
-@@ -695,13 +743,13 @@
+@@ -666,13 +815,21 @@
+ 
+     @Subscriber(value={Add2ComparisonStudiesEvent.class})
+     public void updateComparisonAddedList(Add2ComparisonStudiesEvent event) {
++        try {
++            this.logDebug("EI_TRACE: updateComparisonAddedList() called - event received");
+         String selectedStudyUID;
+-        if (this.isNewAddedComparisonListEnabled()) {
++        boolean newListEnabled = this.isNewAddedComparisonListEnabled();
++        this.logDebug("EI_TRACE: isNewAddedComparisonListEnabled: " + newListEnabled);
++        if (newListEnabled) {
++            this.logDebug("EI_TRACE: New Added comparison list enabled - returning early");
+             return;
+         }
+         final boolean isLocal = event.isLocal();
++        this.logDebug("EI_TRACE: Processing Add2ComparisonStudiesEvent - isLocal: " + isLocal + ", selectedStudies count: " + event.getSelectedStudies().size());
+         final List sortList = event.getSelectedStudies().stream().filter(rp -> this.canBeAdded((RequestedProcedure)rp, isLocal)).sorted(ComposedStudyListController.getRequestedProcedureComparator()).collect(Collectors.toList());
++        this.logDebug("EI_TRACE: After filtering and sorting - sortList count: " + sortList.size());
+         if (sortList.isEmpty()) {
++            this.logDebug("EI_TRACE: sortList is empty - no studies to add");
+             if (event.isNeedCompareImages()) {
+                 event.addResult(false);
+                 this.showWarnDialog();
+@@ -695,13 +852,13 @@
                      public void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
                          Results result = (Results)item.getData("IA_PACS_PatientStudy");
                          ExternalRequestedProcedureLoader.updateRequestedProcedure((List)result.getValue(), sortList);
@@ -118,7 +256,7 @@
                                      if (!study.getStudyUID().equals(studyInfo.getStudyUID()) || ComposedStudyListController.LOCAL.equals(study.getAeCode())) continue;
                                      toBeProcessed.remove(study.getStudyUID());
                                      class StudyAvailableListener
-@@ -711,9 +759,9 @@
+@@ -711,9 +868,9 @@
                                          final /* synthetic */ String val$selectedStudyUID;
                                          final /* synthetic */ boolean val$isLocal;
  
@@ -131,7 +269,7 @@
                                              this.requestedProcedure = requestedProcedure;
                                              this.studyInfo = studyInfo;
                                          }
-@@ -729,7 +777,7 @@
+@@ -729,16 +886,20 @@
                                              ClinicalContextProviderFactory.getProvider().deregisterStudyAvailableListener((IStudyInfo)this.requestedProcedure.getAttributes(), this);
                                          }
                                      }
@@ -140,31 +278,60 @@
                                      ClinicalContextProviderFactory.getProvider().registerStudyAvailableListener(studyInfo, studyAvailabilityListener);
                                      continue block0;
                                  }
-@@ -747,7 +795,7 @@
+                             }
+                         }
+                         if (!toBeProcessed.isEmpty()) {
++                            ComposedStudyListController.this.logDebug("EI_TRACE: Callback processing " + toBeProcessed.size() + " external studies");
+                             for (RequestedProcedure requestedProcedure : toBeProcessed.values()) {
++                                ComposedStudyListController.this.logStudyDetails("EI_TRACE: Callback calling addAddedComparison for external study", requestedProcedure);
+                                 ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
+                             }
++                        } else {
++                            ComposedStudyListController.this.logDebug("EI_TRACE: toBeProcessed is empty - no external studies to process");
+                         }
+                     }
+                 });
+@@ -747,7 +908,9 @@
  
                      @Override
                      protected void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
 -                        for (RequestedProcedure requestedProcedure : sortList) {
++                        ComposedStudyListController.this.logDebug("EI_TRACE: Local studies callback processing " + sortList.size() + " studies");
 +                        for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
++                            ComposedStudyListController.this.logStudyDetails("EI_TRACE: Local callback calling addAddedComparison", requestedProcedure);
                              ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                          }
                      }
-@@ -755,7 +803,7 @@
+@@ -755,11 +918,20 @@
              }
              this.getGateway().compareStudies(new ArrayList<RequestedProcedure>(sortList), this.model.areLocalStudies(), false, null, callbacks);
          } else {
 -            for (RequestedProcedure requestedProcedure : sortList) {
++            this.logDebug("EI_TRACE: No image comparison needed - calling addAddedComparison directly for " + sortList.size() + " studies");
 +            for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
++                this.logStudyDetails("EI_TRACE: About to call addAddedComparison for study", requestedProcedure);
                  this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
              }
          }
-@@ -767,15 +815,25 @@
+-        LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
++            this.logDebug("EI_TRACE: updateComparisonAddedList completed");
++            LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
++        } catch (Exception e) {
++            String errorMsg = "Exception in updateComparisonAddedList(): " + e.getClass().getSimpleName() + ": " + e.getMessage();
++            this.logDebug("EI_TRACE: " + errorMsg);
++            LOGGER.error(errorMsg, e);
++            throw e;  // Re-throw to maintain existing behavior
++        }
+     }
+ 
+     static Comparator<RequestedProcedure> getRequestedProcedureComparator() {
+@@ -767,15 +939,25 @@
      }
  
      private void addAddedComparison(RequestedProcedure requestedProcedure, String selectedStudyUID, boolean isLocal) {
-+        LOGGER.info("=== DEBUG: addAddedComparison() called ===");
-+        this.logStudyDetails("DEBUG: Processing study", requestedProcedure);
-+        LOGGER.info("DEBUG: selectedStudyUID=" + selectedStudyUID + ", isLocal=" + isLocal);
++        this.logDebug("=== EI_DEBUG: addAddedComparison() called ===");
++        this.logStudyDetails("EI_DEBUG: Processing study", requestedProcedure);
++        this.logDebug("EI_DEBUG: selectedStudyUID=" + selectedStudyUID + ", isLocal=" + isLocal);
 +
          if (LOCAL.equals(requestedProcedure.getAeCode())) {
 +            LOGGER.info("DEBUG: Study has LOCAL AeCode, checking for existing comparison study");
@@ -184,7 +351,7 @@
          StudyDisplayUpdater.getInstance().addStudy(requestedProcedure);
          for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
              c.display(this.getStudyListObjects(this.addedComparisonStudies, isLocal));
-@@ -783,13 +841,83 @@
+@@ -783,13 +965,83 @@
          if (StringUtils.isNotEmpty(selectedStudyUID) && CurrentLoadedItemModel.getInstance().getLoadedItem() != null) {
              this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
          }
@@ -192,15 +359,15 @@
 +        // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
 +        // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
 +        // Use direct addition to additionalComparisons to avoid filterByProcedureStatus() that excludes external studies
-+        LOGGER.info("DEBUG: Starting blending logic for main comparison list");
-+        LOGGER.info("DEBUG: Current additionalComparisons size: " + this.additionalComparisons.size());
-+        LOGGER.info("DEBUG: Current comparisonStudies size: " + this.model.getComparisonStudies().size());
++        this.logDebug("EI_DEBUG: Starting blending logic for main comparison list");
++        this.logDebug("EI_DEBUG: Current additionalComparisons size: " + this.additionalComparisons.size());
++        this.logDebug("EI_DEBUG: Current comparisonStudies size: " + this.model.getComparisonStudies().size());
 +
 +        boolean inAdditionalComparisons = this.containsStudy(this.additionalComparisons, requestedProcedure);
 +        boolean inComparisonStudies = this.containsStudy(this.model.getComparisonStudies(), requestedProcedure);
 +
-+        LOGGER.info("DEBUG: Study already in additionalComparisons: " + inAdditionalComparisons);
-+        LOGGER.info("DEBUG: Study already in comparisonStudies: " + inComparisonStudies);
++        this.logDebug("EI_DEBUG: Study already in additionalComparisons: " + inAdditionalComparisons);
++        this.logDebug("EI_DEBUG: Study already in comparisonStudies: " + inComparisonStudies);
 +
 +        if (inAdditionalComparisons) {
 +            LOGGER.info("DEBUG: Study found in additionalComparisons - checking primary keys:");
@@ -223,7 +390,7 @@
 +        }
 +
 +        if (!inAdditionalComparisons && !inComparisonStudies) {
-+            LOGGER.info("DEBUG: Study not found in either collection - adding to blended list");
++            this.logDebug("EI_DEBUG: Study not found in either collection - adding to blended list");
 +            this.additionalComparisons.add(requestedProcedure);
 +            LOGGER.info("DEBUG: additionalComparisons size after add: " + this.additionalComparisons.size());
 +
@@ -252,12 +419,12 @@
 +            this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
 +            LOGGER.info("DEBUG: Triggered tab title updates for all comparisons");
 +
-+            LOGGER.info("DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
++            this.logDebug("EI_DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
 +        } else {
-+            LOGGER.info("DEBUG: Study already exists in collections - skipping blending");
++            this.logDebug("EI_DEBUG: Study already exists in collections - skipping blending");
 +        }
 +
-+        LOGGER.info("=== DEBUG: addAddedComparison() completed ===");
++        this.logDebug("=== EI_DEBUG: addAddedComparison() completed ===");
      }
  
      private void showWarnDialog() {
@@ -269,7 +436,7 @@
          instance.getModel().setMessageType(HapOptionPane.MessageType.WARNING_MESSAGE);
          instance.getModel().setTitle(Messages.ComposedStudyListController_3);
          instance.getModel().setMainInstruction(Messages.ComposedStudyListController_4);
-@@ -845,7 +973,7 @@
+@@ -845,7 +1097,7 @@
          if (this.isNewAddedComparisonListEnabled()) {
              return;
          }
@@ -278,7 +445,7 @@
          sortList.sort(new CreationDateComparator());
          String string = selectedStudyUID = sortList.iterator().hasNext() ? ((RequestedProcedure)sortList.iterator().next()).getStudyUID() : "";
          if (event.isCompareNeeded()) {
-@@ -859,7 +987,7 @@
+@@ -859,7 +1111,7 @@
                          @Override
                          public Void createForTeachingFileLoadableItem(LtaTeachingFileItemMetaDataDecorator metaData) {
                              block0: for (Map.Entry<TeachingFile<TeachingFile.ObjectReference>, IPatientInfo> next : metaData.getTeachingFiles().entrySet()) {
@@ -287,7 +454,7 @@
                                      if (!next.getKey().getClientProperty(TeachingFile.ClientProperty.ATFI_STUID).equals(study.getStudyUID()) || next.getValue() == null) continue;
                                      ExternalRequestedProcedureLoader.updateRequestedProcedure(next.getValue(), study);
                                      study.getPacsStudyDetails().setNumberOfInstances((Long)next.getKey().getClientProperty(TeachingFile.ClientProperty.NUMBER_OF_IMAGES));
-@@ -879,21 +1007,49 @@
+@@ -879,21 +1131,49 @@
          }
      }
  
@@ -351,7 +518,7 @@
      }
  
      public RequestedProcedure getRequestedProcedureById(Long requestedProcedureId) {
-@@ -1038,7 +1194,7 @@
+@@ -1038,7 +1318,7 @@
                                  ComposedStudyListController.this.enableTopToolBar(study);
                              }
                              finally {
@@ -360,7 +527,7 @@
                              }
                          }
  
-@@ -1058,7 +1214,7 @@
+@@ -1058,7 +1338,7 @@
                                  ComposedStudyListController.this.enableTopToolBar(study);
                              }
                              finally {
@@ -369,7 +536,7 @@
                              }
                          }
                      };
-@@ -1073,11 +1229,11 @@
+@@ -1073,11 +1353,11 @@
                              }
                          }
                          finally {
@@ -383,7 +550,7 @@
                          throw new RuntimeException(e);
                      }
                  }
-@@ -1117,7 +1273,7 @@
+@@ -1117,7 +1397,7 @@
                                  studyListObject.setActive(false);
                              }
                              finally {
@@ -392,7 +559,7 @@
                              }
                          }
  
-@@ -1142,7 +1298,7 @@
+@@ -1142,7 +1422,7 @@
                                  this.removeFromAddedList(studyListObject);
                              }
                              finally {
@@ -401,7 +568,7 @@
                              }
                          }
  
-@@ -1164,11 +1320,11 @@
+@@ -1164,11 +1444,11 @@
                              }
                          }
                          finally {
@@ -415,7 +582,7 @@
                          throw new RuntimeException(e);
                      }
                  }
-@@ -1294,7 +1450,7 @@
+@@ -1294,7 +1574,7 @@
  
      public void onLinkedRequestedProceduresChanged(List<RequestedProcedure> requestedProcedures, Set<RequestedProcedure> oldRequestedProcedures) {
          ArrayList<RequestedProcedure> oldActives = !oldRequestedProcedures.isEmpty() ? new ArrayList<RequestedProcedure>(oldRequestedProcedures) : new ArrayList<RequestedProcedure>(this.model.getActiveStudies());
@@ -424,7 +591,7 @@
          ArrayList<RequestedProcedure> oldComparisons = new ArrayList<RequestedProcedure>(this.model.getComparisonStudies());
          this.model.updateModel(requestedProcedures);
          ComposedStudyListController.removeAll(oldActives, this.model.getActiveStudies());
-@@ -1432,6 +1588,7 @@
+@@ -1432,6 +1712,7 @@
          }
      }
  
@@ -432,7 +599,7 @@
      public JComponent getView() {
          return null;
      }
-@@ -1504,4 +1661,4 @@
+@@ -1504,4 +1785,4 @@
              return date2.compareTo(date1);
          }
      }
