@@ -967,6 +967,12 @@ implements IReportSeverityEditableObserver {
                         } else {
                             ComposedStudyListController.this.logDebug("EI_TRACE: toBeProcessed is empty - no external studies to process");
                         }
+
+                        // Trigger final display refresh after all external studies are blended
+                        ComposedStudyListController.this.logDebug("EI_DEBUG: External blending completed - triggering final display refresh");
+                        SwingUtilities.invokeLater(() -> {
+                            ComposedStudyListController.this.refresh();
+                        });
                     }
                 });
             } else {
@@ -979,6 +985,12 @@ implements IReportSeverityEditableObserver {
                             ComposedStudyListController.this.logStudyDetails("EI_TRACE: Local callback calling addAddedComparison", requestedProcedure);
                             ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                         }
+
+                        // Trigger final display refresh after all local studies are blended
+                        ComposedStudyListController.this.logDebug("EI_DEBUG: Local blending completed - triggering final display refresh");
+                        SwingUtilities.invokeLater(() -> {
+                            ComposedStudyListController.this.refresh();
+                        });
                     }
                 });
             }
@@ -989,6 +1001,12 @@ implements IReportSeverityEditableObserver {
                 this.logStudyDetails("EI_TRACE: About to call addAddedComparison for study", requestedProcedure);
                 this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
             }
+
+            // Trigger final display refresh after all direct blending is complete
+            this.logDebug("EI_DEBUG: Direct blending completed - triggering final display refresh");
+            SwingUtilities.invokeLater(() -> {
+                this.refresh();
+            });
         }
             this.logDebug("EI_TRACE: updateComparisonAddedList completed");
             LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
@@ -1111,6 +1129,12 @@ implements IReportSeverityEditableObserver {
 
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
             LOGGER.info("DEBUG: Triggered tab title updates for all comparisons");
+
+            // Trigger a full refresh to ensure the UI processes additionalComparisons
+            SwingUtilities.invokeLater(() -> {
+                this.logDebug("EI_DEBUG: Triggering refresh() to update UI after blending");
+                this.refresh();
+            });
 
             this.logDebug("EI_DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
         } else {
