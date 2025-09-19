@@ -143,6 +143,7 @@ implements IReportSeverityEditableObserver {
     private final List<StudyListObject> moveToActiveStudyList = new ArrayList<StudyListObject>();
     private IReportSeverityObservable reportSeverityObservable;
     private boolean additionalComparisonsLoaded = false;
+    private boolean isBlendingActive = false;
     private DisplayStrategy displayStrategy;
     private ImageAreaGateway gateway;
     private PopupMenuListener popupListener;
@@ -479,24 +480,42 @@ implements IReportSeverityEditableObserver {
     public void display(IAdaptable domainModel) {
         try {
             this.logDebug("EI_TRACE: display() method called");
+            this.logDebug("EI_DISPLAY: isBlendingActive: " + this.isBlendingActive);
+            this.logDebug("EI_DISPLAY: additionalComparisons size before processing: " + this.additionalComparisons.size());
             StudyListData studyListData = (StudyListData)domainModel.getAdapter(StudyListData.class);
             List<RequestedProcedure> activeStudies = studyListData.getActiveStudies();
             this.logDebug("EI_TRACE: display() - activeStudies count: " + activeStudies.size());
             List<RequestedProcedure> comparisonStudies = this.filterByProcedureStatus(studyListData.getRelevantStudies());
-        this.additionalComparisons.removeIf(s -> this.containsStudy((Collection<RequestedProcedure>)activeStudies, (RequestedProcedure)s));
+        // Only remove if not in blending mode to preserve blended studies
+        if (!this.isBlendingActive) {
+            this.logDebug("EI_DISPLAY: Not in blending mode - applying removeIf filter");
+            int sizeBefore = this.additionalComparisons.size();
+            this.additionalComparisons.removeIf(s -> this.containsStudy((Collection<RequestedProcedure>)activeStudies, (RequestedProcedure)s));
+            int sizeAfter = this.additionalComparisons.size();
+            this.logDebug("EI_DISPLAY: removeIf filter removed " + (sizeBefore - sizeAfter) + " studies");
+        } else {
+            this.logDebug("EI_DISPLAY: IN BLENDING MODE - SKIPPING removeIf filter to preserve blended studies");
+        }
         SplitMergeHandlerWrapper handlerWrapper = studyListData.getSplitMergeHandler();
         boolean isTask = studyListData.isTask();
         if (!this.additionalComparisonsLoaded) {
-            comparisonStudies.addAll(this.filterByProcedureStatus(this.additionalComparisons));
+            this.logDebug("EI_DISPLAY: additionalComparisonsLoaded=false - applying filterByProcedureStatus");
+            List<RequestedProcedure> filteredAdditional = this.filterByProcedureStatus(this.additionalComparisons);
+            this.logDebug("EI_DISPLAY: filterByProcedureStatus reduced " + this.additionalComparisons.size() + " to " + filteredAdditional.size());
+            comparisonStudies.addAll(filteredAdditional);
             this.setDockableComparisonsLoaded(false);
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
         } else {
+            this.logDebug("EI_DISPLAY: additionalComparisonsLoaded=true - adding all additionalComparisons without filtering");
+            this.logDebug("EI_DISPLAY: Adding " + this.additionalComparisons.size() + " additional comparison studies");
             comparisonStudies.addAll(this.additionalComparisons);
             this.setDockableComparisonsLoaded(true);
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
         }
+        this.logDebug("EI_DISPLAY: Final comparisonStudies size before model.fillModel: " + comparisonStudies.size());
         this.setComparisonObservers();
         this.model.fillModel(activeStudies, comparisonStudies);
+        this.logDebug("EI_DISPLAY: After model.fillModel - model comparison size: " + this.model.getComparisonStudies().size());
         this.model.setLocalStudies(studyListData.isLocal());
         ReportingContext.setAllPatientProcedures(studyListData.getAllStudies());
         this.performUpdates(activeStudies, comparisonStudies, handlerWrapper, isTask);
@@ -854,6 +873,9 @@ implements IReportSeverityEditableObserver {
 
     @Subscriber(value={Add2ComparisonStudiesEvent.class})
     public void updateComparisonAddedList(Add2ComparisonStudiesEvent event) {
+        this.isBlendingActive = true;
+        this.logDebug("EI_BLENDING: === BLENDING STARTED ===");
+        this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
         try {
             this.logDebug("EI_TRACE: updateComparisonAddedList() called - event received");
         String selectedStudyUID;
@@ -970,13 +992,21 @@ implements IReportSeverityEditableObserver {
         }
             this.logDebug("EI_TRACE: updateComparisonAddedList completed");
             LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
+
         } catch (Exception e) {
             String errorMsg = "Exception in updateComparisonAddedList(): " + e.getClass().getSimpleName() + ": " + e.getMessage();
             this.logDebug("EI_TRACE: " + errorMsg);
             LOGGER.error(errorMsg, e);
             throw e;  // Re-throw to maintain existing behavior
+        } finally {
+            this.isBlendingActive = false;
+            this.logDebug("EI_BLENDING: === BLENDING COMPLETED ===");
+            this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
+            this.logDebug("EI_BLENDING: Final additionalComparisons size: " + this.additionalComparisons.size());
+            this.logDebug("EI_BLENDING: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
         }
     }
+
 
     static Comparator<RequestedProcedure> getRequestedProcedureComparator() {
         return Comparator.comparing(RequestedProcedure::getDateTime, Comparator.nullsFirst(Collections.reverseOrder()));
