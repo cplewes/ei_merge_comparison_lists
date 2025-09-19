@@ -857,8 +857,10 @@ implements IReportSeverityEditableObserver {
 
         // Use simple deduplication instead of aggressive canBeAdded() filtering
         // This matches the original addAddedComparison behavior which has no filtering
+        // Use StudyUID-based deduplication instead of containsStudy() to avoid primary key exceptions on external studies
         final List<RequestedProcedure> sortList = event.getSelectedStudies().stream()
-            .filter(rp -> !this.containsStudy(this.addedComparisonStudies, (RequestedProcedure)rp))
+            .filter(rp -> !this.addedComparisonStudies.stream()
+                .anyMatch(existing -> existing.getStudyUID().equals(((RequestedProcedure)rp).getStudyUID())))
             .sorted(ComposedStudyListController.getRequestedProcedureComparator())
             .collect(Collectors.toList());
         this.logDebug("EI_TRACE: After deduplication and sorting - sortList count: " + sortList.size());
