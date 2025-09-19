@@ -572,7 +572,9 @@ implements IReportSeverityEditableObserver {
     }
 
     private boolean containsStudy(Collection<RequestedProcedure> collection, RequestedProcedure study) {
-        return collection.stream().map(RequestedProcedure::getPrimaryKey).anyMatch(pk -> pk.equals(study.getPrimaryKey()));
+        // Use StudyUID comparison instead of primary key to handle external studies
+        return collection.stream()
+            .anyMatch(existing -> existing.getStudyUID().equals(study.getStudyUID()));
     }
 
     private static String lastFileError = null;
@@ -974,7 +976,9 @@ implements IReportSeverityEditableObserver {
     private void addAddedComparison(RequestedProcedure requestedProcedure, String selectedStudyUID, boolean isLocal) {
         this.logDebug("=== EI_DEBUG: addAddedComparison() called ===");
         this.logStudyDetails("EI_DEBUG: Processing study", requestedProcedure);
-        this.logDebug("EI_DEBUG: selectedStudyUID=" + selectedStudyUID + ", isLocal=" + isLocal);
+        // Use the actual study's UID instead of the passed selectedStudyUID
+        String actualSelectedStudyUID = requestedProcedure.getStudyUID();
+        this.logDebug("EI_DEBUG: selectedStudyUID=" + actualSelectedStudyUID + ", isLocal=" + isLocal);
 
         if (LOCAL.equals(requestedProcedure.getAeCode())) {
             LOGGER.info("DEBUG: Study has LOCAL AeCode, checking for existing comparison study");
@@ -995,9 +999,8 @@ implements IReportSeverityEditableObserver {
         for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
             c.display(this.getStudyListObjects(this.addedComparisonStudies, isLocal));
         }
-        if (StringUtils.isNotEmpty(selectedStudyUID) && CurrentLoadedItemModel.getInstance().getLoadedItem() != null) {
-            this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
-        }
+        // Skip automatic study selection to prevent UI tab switching to Added tab
+        // Studies are blended into main Comparison list below, so user stays on Comparison tab
 
         // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
         // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
@@ -1015,9 +1018,13 @@ implements IReportSeverityEditableObserver {
         if (inAdditionalComparisons) {
             LOGGER.info("DEBUG: Study found in additionalComparisons - checking primary keys:");
             for (RequestedProcedure existing : this.additionalComparisons) {
-                if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
-                    this.logStudyDetails("DEBUG: Matching study in additionalComparisons", existing);
-                    break;
+                try {
+                    if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
+                        this.logStudyDetails("DEBUG: Matching study in additionalComparisons", existing);
+                        break;
+                    }
+                } catch (IllegalStateException e) {
+                    this.logDebug("DEBUG: External study without numeric primary key in additionalComparisons - skipping primary key comparison");
                 }
             }
         }
@@ -1025,9 +1032,13 @@ implements IReportSeverityEditableObserver {
         if (inComparisonStudies) {
             LOGGER.info("DEBUG: Study found in comparisonStudies - checking primary keys:");
             for (RequestedProcedure existing : this.model.getComparisonStudies()) {
-                if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
-                    this.logStudyDetails("DEBUG: Matching study in comparisonStudies", existing);
-                    break;
+                try {
+                    if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
+                        this.logStudyDetails("DEBUG: Matching study in comparisonStudies", existing);
+                        break;
+                    }
+                } catch (IllegalStateException e) {
+                    this.logDebug("DEBUG: External study without numeric primary key in comparisonStudies - skipping primary key comparison");
                 }
             }
         }
