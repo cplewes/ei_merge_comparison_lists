@@ -158,6 +158,18 @@ implements IReportSeverityEditableObserver {
         // Test logging system on initialization
         this.logDebug("EI_DEBUG: ComposedStudyListController initialized - testing file logging");
 
+        // Test logging from background thread to verify threading works
+        Thread testThread = new Thread(() -> {
+            try {
+                Thread.sleep(100); // Small delay to distinguish from EDT
+                this.logDebug("EI_DEBUG: Background thread logging test");
+            } catch (InterruptedException e) {
+                System.err.println("EI_DEBUG: Thread test interrupted");
+            }
+        });
+        testThread.setName("EI-LogTest-Thread");
+        testThread.start();
+
         this.init(selectedStudyModel);
     }
 
@@ -568,24 +580,33 @@ implements IReportSeverityEditableObserver {
 
     private synchronized void logToFile(String message) {
         String logPath = "C:\\ProgramData\\AGFA\\IMPAX Agility\\ei_log.txt";
+
+        // Always log to console first for immediate visibility
+        String threadName = Thread.currentThread().getName();
+        String threadId = String.valueOf(Thread.currentThread().getId());
+        boolean isEDT = javax.swing.SwingUtilities.isEventDispatchThread();
+        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new java.util.Date());
+
+        // Enhanced console logging with thread details
+        String consoleEntry = "[" + timestamp + "] [" + threadName + "-" + threadId + "] [EDT:" + isEDT + "] " + message;
+        System.out.println("EI_LOG_CONSOLE: " + consoleEntry);
+        System.out.flush(); // Force immediate output
+
         try {
             // Ensure directory exists
             java.io.File logFile = new java.io.File(logPath);
             java.io.File parentDir = logFile.getParentFile();
             if (parentDir != null && !parentDir.exists()) {
-                parentDir.mkdirs();
+                boolean dirCreated = parentDir.mkdirs();
+                System.out.println("EI_LOG_CONSOLE: Directory creation result: " + dirCreated);
             }
 
-            java.io.FileWriter writer = new java.io.FileWriter(logPath, true);
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-            String timestamp = sdf.format(new java.util.Date());
-            String threadName = Thread.currentThread().getName();
-            String logEntry = "[" + timestamp + "] [" + threadName + "] " + message + "\n";
-            writer.write(logEntry);
-            writer.close();
-
-            // Console fallback for immediate verification
-            System.out.println("EI_LOG: " + logEntry.trim());
+            // Use try-with-resources for better file handling
+            try (java.io.FileWriter writer = new java.io.FileWriter(logPath, true)) {
+                String logEntry = consoleEntry + "\n";
+                writer.write(logEntry);
+                writer.flush(); // Force immediate write
+            }
 
             // Reset error tracking on success
             lastFileError = null;
@@ -593,13 +614,21 @@ implements IReportSeverityEditableObserver {
 
         } catch (Exception e) {
             fileErrorCount++;
-            String errorDetails = "Failed to write to " + logPath + ": " + e.getClass().getSimpleName() + ": " + e.getMessage();
+            String errorDetails = "Failed to write to " + logPath + " from thread " + threadName + ": " + e.getClass().getSimpleName() + ": " + e.getMessage();
             lastFileError = errorDetails;
 
-            // Fallback to regular logger and console
-            LOGGER.error(errorDetails);
+            // Multiple fallback channels
             System.err.println("EI_LOG_ERROR: " + errorDetails);
-            System.out.println("EI_LOG_FALLBACK: " + message);
+            System.err.flush();
+            System.out.println("EI_LOG_FALLBACK: " + consoleEntry);
+            System.out.flush();
+
+            // Try regular logger as final fallback
+            try {
+                LOGGER.error(errorDetails);
+            } catch (Exception loggerEx) {
+                System.err.println("EI_LOG_CRITICAL: Even LOGGER failed: " + loggerEx.getMessage());
+            }
         }
     }
 
@@ -611,10 +640,26 @@ implements IReportSeverityEditableObserver {
     }
 
     private void logDebug(String message) {
-        LOGGER.info(message);
-        this.logToFile(message);
-        // Always output to console for immediate verification
-        System.out.println("EI_DEBUG_CONSOLE: " + message);
+        String threadInfo = Thread.currentThread().getName() + "-" + Thread.currentThread().getId();
+        boolean isEDT = javax.swing.SwingUtilities.isEventDispatchThread();
+        String enhancedMessage = message + " [THREAD:" + threadInfo + ",EDT:" + isEDT + "]";
+
+        // Always log to console FIRST with thread details
+        System.out.println("EI_DEBUG_CONSOLE: " + enhancedMessage);
+        System.out.flush();
+
+        // Then try other channels
+        try {
+            LOGGER.info(enhancedMessage);
+        } catch (Exception e) {
+            System.err.println("EI_DEBUG_ERROR: LOGGER.info failed: " + e.getMessage());
+        }
+
+        try {
+            this.logToFile(message); // Original message to file, enhanced to console
+        } catch (Exception e) {
+            System.err.println("EI_DEBUG_ERROR: logToFile failed: " + e.getMessage());
+        }
     }
 
     private void logStudyDetails(String prefix, RequestedProcedure study) {
