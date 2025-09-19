@@ -144,6 +144,7 @@ implements IReportSeverityEditableObserver {
     private IReportSeverityObservable reportSeverityObservable;
     private boolean additionalComparisonsLoaded = false;
     private boolean isBlendingActive = false;
+    private IAdaptable lastDomainModel;
     private DisplayStrategy displayStrategy;
     private ImageAreaGateway gateway;
     private PopupMenuListener popupListener;
@@ -479,6 +480,8 @@ implements IReportSeverityEditableObserver {
 
     public void display(IAdaptable domainModel) {
         try {
+            // Store current domain model for potential re-display after blending
+            this.lastDomainModel = domainModel;
             this.logDebug("EI_TRACE: display() method called");
             this.logDebug("EI_DISPLAY: isBlendingActive: " + this.isBlendingActive);
             this.logDebug("EI_DISPLAY: additionalComparisons size before processing: " + this.additionalComparisons.size());
@@ -967,12 +970,6 @@ implements IReportSeverityEditableObserver {
                         } else {
                             ComposedStudyListController.this.logDebug("EI_TRACE: toBeProcessed is empty - no external studies to process");
                         }
-
-                        // Trigger final display refresh after all external studies are blended
-                        ComposedStudyListController.this.logDebug("EI_DEBUG: External blending completed - triggering final display refresh");
-                        SwingUtilities.invokeLater(() -> {
-                            ComposedStudyListController.this.refresh();
-                        });
                     }
                 });
             } else {
@@ -985,12 +982,6 @@ implements IReportSeverityEditableObserver {
                             ComposedStudyListController.this.logStudyDetails("EI_TRACE: Local callback calling addAddedComparison", requestedProcedure);
                             ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                         }
-
-                        // Trigger final display refresh after all local studies are blended
-                        ComposedStudyListController.this.logDebug("EI_DEBUG: Local blending completed - triggering final display refresh");
-                        SwingUtilities.invokeLater(() -> {
-                            ComposedStudyListController.this.refresh();
-                        });
                     }
                 });
             }
@@ -1001,12 +992,6 @@ implements IReportSeverityEditableObserver {
                 this.logStudyDetails("EI_TRACE: About to call addAddedComparison for study", requestedProcedure);
                 this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
             }
-
-            // Trigger final display refresh after all direct blending is complete
-            this.logDebug("EI_DEBUG: Direct blending completed - triggering final display refresh");
-            SwingUtilities.invokeLater(() -> {
-                this.refresh();
-            });
         }
             this.logDebug("EI_TRACE: updateComparisonAddedList completed");
             LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
@@ -1017,11 +1002,28 @@ implements IReportSeverityEditableObserver {
             LOGGER.error(errorMsg, e);
             throw e;  // Re-throw to maintain existing behavior
         } finally {
-            this.isBlendingActive = false;
-            this.logDebug("EI_BLENDING: === BLENDING COMPLETED ===");
-            this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
+            this.logDebug("EI_BLENDING: === BLENDING PROCESSING COMPLETED ===");
             this.logDebug("EI_BLENDING: Final additionalComparisons size: " + this.additionalComparisons.size());
             this.logDebug("EI_BLENDING: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
+
+            // Trigger explicit display() call to process additionalComparisons into UI
+            if (this.lastDomainModel != null && this.additionalComparisons.size() > 0) {
+                this.logDebug("EI_BLENDING: Triggering display() to process additionalComparisons into UI");
+                SwingUtilities.invokeLater(() -> {
+                    this.logDebug("EI_BLENDING: Calling display() with " + this.additionalComparisons.size() + " additional comparisons");
+                    this.display(this.lastDomainModel);
+
+                    // Only set blending inactive after display completes
+                    SwingUtilities.invokeLater(() -> {
+                        this.isBlendingActive = false;
+                        this.logDebug("EI_BLENDING: === BLENDING FULLY COMPLETED ===");
+                        this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
+                    });
+                });
+            } else {
+                this.isBlendingActive = false;
+                this.logDebug("EI_BLENDING: No additional comparisons to display - setting isBlendingActive to false");
+            }
         }
     }
 
@@ -1129,12 +1131,6 @@ implements IReportSeverityEditableObserver {
 
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
             LOGGER.info("DEBUG: Triggered tab title updates for all comparisons");
-
-            // Trigger a full refresh to ensure the UI processes additionalComparisons
-            SwingUtilities.invokeLater(() -> {
-                this.logDebug("EI_DEBUG: Triggering refresh() to update UI after blending");
-                this.refresh();
-            });
 
             this.logDebug("EI_DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
         } else {
