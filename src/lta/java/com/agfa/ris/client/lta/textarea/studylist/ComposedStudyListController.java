@@ -509,16 +509,40 @@ implements IReportSeverityEditableObserver {
             this.setDockableComparisonsLoaded(false);
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
         } else {
-            this.logDebug("EI_DISPLAY: additionalComparisonsLoaded=true - adding all additionalComparisons without filtering");
-            this.logDebug("EI_DISPLAY: Adding " + this.additionalComparisons.size() + " additional comparison studies");
-            comparisonStudies.addAll(this.additionalComparisons);
+            this.logDebug("EI_DISPLAY: additionalComparisonsLoaded=true - checking for studies already in model");
+            this.logDebug("EI_DISPLAY: Current comparisonStudies size: " + comparisonStudies.size());
+            this.logDebug("EI_DISPLAY: Current additionalComparisons size: " + this.additionalComparisons.size());
+
+            // Only add studies from additionalComparisons that are NOT already in comparisonStudies
+            // This prevents double addition during post-blending display() calls
+            List<RequestedProcedure> studiesToAdd = this.additionalComparisons.stream()
+                .filter(additional -> !this.containsStudy(comparisonStudies, additional))
+                .collect(Collectors.toList());
+
+            this.logDebug("EI_DISPLAY: After deduplication - adding " + studiesToAdd.size() + " studies (was " + this.additionalComparisons.size() + ")");
+            comparisonStudies.addAll(studiesToAdd);
             this.setDockableComparisonsLoaded(true);
             this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
         }
         this.logDebug("EI_DISPLAY: Final comparisonStudies size before model.fillModel: " + comparisonStudies.size());
+
+        // Log detailed study information for debugging
+        if (comparisonStudies.size() > 15) {
+            this.logDebug("EI_DISPLAY: LARGE STUDY COUNT - investigating duplication");
+            this.logDebug("EI_DISPLAY: Original model comparison studies: " + this.model.getComparisonStudies().size());
+            this.logDebug("EI_DISPLAY: Additional comparisons: " + this.additionalComparisons.size());
+        }
+
         this.setComparisonObservers();
         this.model.fillModel(activeStudies, comparisonStudies);
         this.logDebug("EI_DISPLAY: After model.fillModel - model comparison size: " + this.model.getComparisonStudies().size());
+
+        // Log timing information for user experience analysis
+        long currentTime = System.currentTimeMillis();
+        this.logDebug("EI_TIMING: display() fillModel completed at: " + currentTime);
+        if (this.isBlendingActive) {
+            this.logDebug("EI_TIMING: This is a post-blending display() call");
+        }
         this.model.setLocalStudies(studyListData.isLocal());
         ReportingContext.setAllPatientProcedures(studyListData.getAllStudies());
         this.performUpdates(activeStudies, comparisonStudies, handlerWrapper, isTask);
@@ -530,7 +554,10 @@ implements IReportSeverityEditableObserver {
         // NEW: Auto-search for Added studies for the current patient to enable blending
         // This replaces the complex event-based auto-triggering with a direct approach
         this.logDebug("EI_TRACE: Checking if should trigger Added search - activeStudies.isEmpty(): " + activeStudies.isEmpty());
-        if (!activeStudies.isEmpty()) {
+        this.logDebug("EI_TRACE: isBlendingActive: " + this.isBlendingActive);
+
+        // Only trigger Added search if not currently in blending mode to prevent recursive loops
+        if (!activeStudies.isEmpty() && !this.isBlendingActive) {
             Patient currentPatient = activeStudies.get(0).getPatient();
             this.logDebug("EI_TRACE: Got patient from first active study - patient null: " + (currentPatient == null));
             if (currentPatient != null) {
@@ -541,6 +568,8 @@ implements IReportSeverityEditableObserver {
             } else {
                 this.logDebug("EI_TRACE: Patient is null - skipping Added search");
             }
+        } else if (this.isBlendingActive) {
+            this.logDebug("EI_TRACE: Skipping Added search - currently in blending mode (prevents recursive loop)");
         } else {
             this.logDebug("EI_TRACE: No active studies - skipping Added search");
         }
@@ -881,6 +910,8 @@ implements IReportSeverityEditableObserver {
         this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
         try {
             this.logDebug("EI_TRACE: updateComparisonAddedList() called - event received");
+            long blendingStartTime = System.currentTimeMillis();
+            this.logDebug("EI_TIMING: Blending started at: " + blendingStartTime);
         String selectedStudyUID;
         boolean newListEnabled = this.isNewAddedComparisonListEnabled();
         this.logDebug("EI_TRACE: isNewAddedComparisonListEnabled: " + newListEnabled);
@@ -1006,18 +1037,22 @@ implements IReportSeverityEditableObserver {
             this.logDebug("EI_BLENDING: Final additionalComparisons size: " + this.additionalComparisons.size());
             this.logDebug("EI_BLENDING: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
 
-            // Trigger explicit display() call to process additionalComparisons into UI
+            // Schedule UI refresh after all EDT tasks complete to ensure proper timing
             if (this.lastDomainModel != null && this.additionalComparisons.size() > 0) {
-                this.logDebug("EI_BLENDING: Triggering display() to process additionalComparisons into UI");
-                SwingUtilities.invokeLater(() -> {
-                    this.logDebug("EI_BLENDING: Calling display() with " + this.additionalComparisons.size() + " additional comparisons");
-                    this.display(this.lastDomainModel);
+                this.logDebug("EI_BLENDING: Scheduling delayed display() to refresh UI");
 
-                    // Only set blending inactive after display completes
+                // Use a delay to ensure blending is fully complete before triggering UI refresh
+                SwingUtilities.invokeLater(() -> {
                     SwingUtilities.invokeLater(() -> {
-                        this.isBlendingActive = false;
-                        this.logDebug("EI_BLENDING: === BLENDING FULLY COMPLETED ===");
-                        this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
+                        this.logDebug("EI_BLENDING: Executing delayed display() with " + this.additionalComparisons.size() + " additional comparisons");
+                        this.display(this.lastDomainModel);
+
+                        // Complete blending after UI refresh
+                        SwingUtilities.invokeLater(() -> {
+                            this.isBlendingActive = false;
+                            this.logDebug("EI_BLENDING: === BLENDING FULLY COMPLETED ===");
+                            this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
+                        });
                     });
                 });
             } else {
