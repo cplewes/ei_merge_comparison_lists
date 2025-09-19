@@ -1,5 +1,5 @@
 --- /home/cplewes/dev/ei_merge_comparison_lists/original/lta/src/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-17 14:53:51.381378368 -0600
-+++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-19 10:46:22.512566190 -0600
++++ /home/cplewes/dev/ei_merge_comparison_lists/src/lta/java/com/agfa/ris/client/lta/textarea/studylist/ComposedStudyListController.java	2025-09-19 10:54:12.144133386 -0600
 @@ -63,6 +63,7 @@
  import com.agfa.ris.client.lta.textarea.event.RemoveFromListEvent;
  import com.agfa.ris.client.lta.textarea.event.RemovedStudyEvent;
@@ -249,7 +249,7 @@
              this.getActiveStudiesController().getImageAreaGateway().addStudiesToSidebar((Collection<RequestedProcedure>)newActives, true, this.model.areLocalStudies());
          }
          for (RequestedProcedure comparisonRequestedProcedure : comparisons) {
-@@ -666,13 +843,21 @@
+@@ -666,13 +843,27 @@
  
      @Subscriber(value={Add2ComparisonStudiesEvent.class})
      public void updateComparisonAddedList(Add2ComparisonStudiesEvent event) {
@@ -265,15 +265,22 @@
 +            // Continue to blending logic regardless of feature flag
          }
          final boolean isLocal = event.isLocal();
+-        final List sortList = event.getSelectedStudies().stream().filter(rp -> this.canBeAdded((RequestedProcedure)rp, isLocal)).sorted(ComposedStudyListController.getRequestedProcedureComparator()).collect(Collectors.toList());
 +        this.logDebug("EI_TRACE: Processing Add2ComparisonStudiesEvent - isLocal: " + isLocal + ", selectedStudies count: " + event.getSelectedStudies().size());
-         final List sortList = event.getSelectedStudies().stream().filter(rp -> this.canBeAdded((RequestedProcedure)rp, isLocal)).sorted(ComposedStudyListController.getRequestedProcedureComparator()).collect(Collectors.toList());
-+        this.logDebug("EI_TRACE: After filtering and sorting - sortList count: " + sortList.size());
++
++        // Use simple deduplication instead of aggressive canBeAdded() filtering
++        // This matches the original addAddedComparison behavior which has no filtering
++        final List<RequestedProcedure> sortList = event.getSelectedStudies().stream()
++            .filter(rp -> !this.containsStudy(this.addedComparisonStudies, (RequestedProcedure)rp))
++            .sorted(ComposedStudyListController.getRequestedProcedureComparator())
++            .collect(Collectors.toList());
++        this.logDebug("EI_TRACE: After deduplication and sorting - sortList count: " + sortList.size());
          if (sortList.isEmpty()) {
 +            this.logDebug("EI_TRACE: sortList is empty - no studies to add");
              if (event.isNeedCompareImages()) {
                  event.addResult(false);
                  this.showWarnDialog();
-@@ -695,13 +880,13 @@
+@@ -695,13 +886,13 @@
                      public void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
                          Results result = (Results)item.getData("IA_PACS_PatientStudy");
                          ExternalRequestedProcedureLoader.updateRequestedProcedure((List)result.getValue(), sortList);
@@ -290,7 +297,7 @@
                                      if (!study.getStudyUID().equals(studyInfo.getStudyUID()) || ComposedStudyListController.LOCAL.equals(study.getAeCode())) continue;
                                      toBeProcessed.remove(study.getStudyUID());
                                      class StudyAvailableListener
-@@ -711,9 +896,9 @@
+@@ -711,9 +902,9 @@
                                          final /* synthetic */ String val$selectedStudyUID;
                                          final /* synthetic */ boolean val$isLocal;
  
@@ -303,7 +310,7 @@
                                              this.requestedProcedure = requestedProcedure;
                                              this.studyInfo = studyInfo;
                                          }
-@@ -729,16 +914,20 @@
+@@ -729,16 +920,20 @@
                                              ClinicalContextProviderFactory.getProvider().deregisterStudyAvailableListener((IStudyInfo)this.requestedProcedure.getAttributes(), this);
                                          }
                                      }
@@ -325,7 +332,7 @@
                          }
                      }
                  });
-@@ -747,7 +936,9 @@
+@@ -747,7 +942,9 @@
  
                      @Override
                      protected void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
@@ -336,7 +343,7 @@
                              ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                          }
                      }
-@@ -755,11 +946,20 @@
+@@ -755,11 +952,20 @@
              }
              this.getGateway().compareStudies(new ArrayList<RequestedProcedure>(sortList), this.model.areLocalStudies(), false, null, callbacks);
          } else {
@@ -359,7 +366,7 @@
      }
  
      static Comparator<RequestedProcedure> getRequestedProcedureComparator() {
-@@ -767,15 +967,25 @@
+@@ -767,15 +973,25 @@
      }
  
      private void addAddedComparison(RequestedProcedure requestedProcedure, String selectedStudyUID, boolean isLocal) {
@@ -385,7 +392,7 @@
          StudyDisplayUpdater.getInstance().addStudy(requestedProcedure);
          for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
              c.display(this.getStudyListObjects(this.addedComparisonStudies, isLocal));
-@@ -783,13 +993,83 @@
+@@ -783,13 +999,83 @@
          if (StringUtils.isNotEmpty(selectedStudyUID) && CurrentLoadedItemModel.getInstance().getLoadedItem() != null) {
              this.selectedStudy(selectedStudyUID, StudyModule.Added, this.comparisonAddedList);
          }
@@ -470,7 +477,7 @@
          instance.getModel().setMessageType(HapOptionPane.MessageType.WARNING_MESSAGE);
          instance.getModel().setTitle(Messages.ComposedStudyListController_3);
          instance.getModel().setMainInstruction(Messages.ComposedStudyListController_4);
-@@ -845,7 +1125,7 @@
+@@ -845,7 +1131,7 @@
          if (this.isNewAddedComparisonListEnabled()) {
              return;
          }
@@ -479,7 +486,7 @@
          sortList.sort(new CreationDateComparator());
          String string = selectedStudyUID = sortList.iterator().hasNext() ? ((RequestedProcedure)sortList.iterator().next()).getStudyUID() : "";
          if (event.isCompareNeeded()) {
-@@ -859,7 +1139,7 @@
+@@ -859,7 +1145,7 @@
                          @Override
                          public Void createForTeachingFileLoadableItem(LtaTeachingFileItemMetaDataDecorator metaData) {
                              block0: for (Map.Entry<TeachingFile<TeachingFile.ObjectReference>, IPatientInfo> next : metaData.getTeachingFiles().entrySet()) {
@@ -488,7 +495,7 @@
                                      if (!next.getKey().getClientProperty(TeachingFile.ClientProperty.ATFI_STUID).equals(study.getStudyUID()) || next.getValue() == null) continue;
                                      ExternalRequestedProcedureLoader.updateRequestedProcedure(next.getValue(), study);
                                      study.getPacsStudyDetails().setNumberOfInstances((Long)next.getKey().getClientProperty(TeachingFile.ClientProperty.NUMBER_OF_IMAGES));
-@@ -879,21 +1159,49 @@
+@@ -879,21 +1165,49 @@
          }
      }
  
@@ -552,7 +559,7 @@
      }
  
      public RequestedProcedure getRequestedProcedureById(Long requestedProcedureId) {
-@@ -1038,7 +1346,7 @@
+@@ -1038,7 +1352,7 @@
                                  ComposedStudyListController.this.enableTopToolBar(study);
                              }
                              finally {
@@ -561,7 +568,7 @@
                              }
                          }
  
-@@ -1058,7 +1366,7 @@
+@@ -1058,7 +1372,7 @@
                                  ComposedStudyListController.this.enableTopToolBar(study);
                              }
                              finally {
@@ -570,7 +577,7 @@
                              }
                          }
                      };
-@@ -1073,11 +1381,11 @@
+@@ -1073,11 +1387,11 @@
                              }
                          }
                          finally {
@@ -584,7 +591,7 @@
                          throw new RuntimeException(e);
                      }
                  }
-@@ -1117,7 +1425,7 @@
+@@ -1117,7 +1431,7 @@
                                  studyListObject.setActive(false);
                              }
                              finally {
@@ -593,7 +600,7 @@
                              }
                          }
  
-@@ -1142,7 +1450,7 @@
+@@ -1142,7 +1456,7 @@
                                  this.removeFromAddedList(studyListObject);
                              }
                              finally {
@@ -602,7 +609,7 @@
                              }
                          }
  
-@@ -1164,11 +1472,11 @@
+@@ -1164,11 +1478,11 @@
                              }
                          }
                          finally {
@@ -616,7 +623,7 @@
                          throw new RuntimeException(e);
                      }
                  }
-@@ -1294,7 +1602,7 @@
+@@ -1294,7 +1608,7 @@
  
      public void onLinkedRequestedProceduresChanged(List<RequestedProcedure> requestedProcedures, Set<RequestedProcedure> oldRequestedProcedures) {
          ArrayList<RequestedProcedure> oldActives = !oldRequestedProcedures.isEmpty() ? new ArrayList<RequestedProcedure>(oldRequestedProcedures) : new ArrayList<RequestedProcedure>(this.model.getActiveStudies());
@@ -625,7 +632,7 @@
          ArrayList<RequestedProcedure> oldComparisons = new ArrayList<RequestedProcedure>(this.model.getComparisonStudies());
          this.model.updateModel(requestedProcedures);
          ComposedStudyListController.removeAll(oldActives, this.model.getActiveStudies());
-@@ -1432,6 +1740,7 @@
+@@ -1432,6 +1746,7 @@
          }
      }
  
@@ -633,7 +640,7 @@
      public JComponent getView() {
          return null;
      }
-@@ -1504,4 +1813,4 @@
+@@ -1504,4 +1819,4 @@
              return date2.compareTo(date1);
          }
      }

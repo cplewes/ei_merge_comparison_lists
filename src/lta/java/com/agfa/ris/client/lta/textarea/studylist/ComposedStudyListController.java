@@ -854,8 +854,14 @@ implements IReportSeverityEditableObserver {
         }
         final boolean isLocal = event.isLocal();
         this.logDebug("EI_TRACE: Processing Add2ComparisonStudiesEvent - isLocal: " + isLocal + ", selectedStudies count: " + event.getSelectedStudies().size());
-        final List sortList = event.getSelectedStudies().stream().filter(rp -> this.canBeAdded((RequestedProcedure)rp, isLocal)).sorted(ComposedStudyListController.getRequestedProcedureComparator()).collect(Collectors.toList());
-        this.logDebug("EI_TRACE: After filtering and sorting - sortList count: " + sortList.size());
+
+        // Use simple deduplication instead of aggressive canBeAdded() filtering
+        // This matches the original addAddedComparison behavior which has no filtering
+        final List<RequestedProcedure> sortList = event.getSelectedStudies().stream()
+            .filter(rp -> !this.containsStudy(this.addedComparisonStudies, (RequestedProcedure)rp))
+            .sorted(ComposedStudyListController.getRequestedProcedureComparator())
+            .collect(Collectors.toList());
+        this.logDebug("EI_TRACE: After deduplication and sorting - sortList count: " + sortList.size());
         if (sortList.isEmpty()) {
             this.logDebug("EI_TRACE: sortList is empty - no studies to add");
             if (event.isNeedCompareImages()) {
