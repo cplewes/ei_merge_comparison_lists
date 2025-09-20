@@ -88,8 +88,11 @@ extends AbstractComparisonSearchAreaController<RequestedProcedure> {
             result = this.addedComparisonStudiesList.updateList(add2ComparisonStudiesEvent);
         }
 
-        // Send event globally for blending functionality
-        globalEventBus.sendEvent((IEvent)add2ComparisonStudiesEvent);
+        boolean shouldBroadcast = result || Objects.isNull(this.addedComparisonStudiesList);
+        if (shouldBroadcast) {
+            // Send event globally for blending functionality
+            globalEventBus.sendEvent((IEvent)add2ComparisonStudiesEvent);
+        }
 
         if (result) {
             this.searchScreensController.getFrontController().clear();

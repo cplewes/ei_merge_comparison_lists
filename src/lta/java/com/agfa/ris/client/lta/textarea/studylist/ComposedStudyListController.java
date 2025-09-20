@@ -145,6 +145,7 @@ implements IReportSeverityEditableObserver {
     private boolean additionalComparisonsLoaded = false;
     private boolean isBlendingActive = false;
     private Set<String> blendedStudyUIDs = new HashSet<String>();
+    private String lastTriggeredAddedSearchStudyUID;
     private DisplayStrategy displayStrategy;
     private ImageAreaGateway gateway;
     private PopupMenuListener popupListener;
@@ -473,6 +474,8 @@ implements IReportSeverityEditableObserver {
         this.selectedStudyModel.setStudyModule(StudyModule.Active);
         this.model.clear();
         this.additionalComparisons.clear();
+        this.blendedStudyUIDs.clear();
+        this.lastTriggeredAddedSearchStudyUID = null;
         if (this.splitMergeHandler != null) {
             this.splitMergeHandler.removePropertyChangeListener("isSplitMergePossible", this.isSplitMergePossibleListener);
         }
@@ -563,12 +566,21 @@ implements IReportSeverityEditableObserver {
         this.logDebug("EI_TRACE: isBlendingActive: " + this.isBlendingActive);
 
         // Only trigger Added search if not currently in blending mode to prevent recursive loops
+        if (activeStudies.isEmpty()) {
+            this.lastTriggeredAddedSearchStudyUID = null;
+        }
+
         if (!activeStudies.isEmpty() && !this.isBlendingActive) {
             Patient currentPatient = activeStudies.get(0).getPatient();
             if (currentPatient != null) {
                 // Use the existing Added search mechanism to find studies for this patient
                 // This will trigger the existing addAddedComparison logic to blend results
-                this.triggerAddedStudySearchForPatient(currentPatient);
+                String anchorStudyUID = activeStudies.get(0).getStudyUID();
+                boolean hasBlendedStudies = !this.addedComparisonStudies.isEmpty() || !this.additionalComparisons.isEmpty();
+                if (!hasBlendedStudies && !Objects.equals(this.lastTriggeredAddedSearchStudyUID, anchorStudyUID)) {
+                    this.triggerAddedStudySearchForPatient(currentPatient);
+                    this.lastTriggeredAddedSearchStudyUID = anchorStudyUID;
+                }
             } else {
             }
         } else if (this.isBlendingActive) {
@@ -1301,6 +1313,8 @@ implements IReportSeverityEditableObserver {
     private void removeComparisonAddedFromList(RequestedProcedure procedure) {
         String selectedStudyUid = procedure.getStudyUID();
         this.addedComparisonStudies.stream().filter(rp -> rp.getStudyUID().equals(selectedStudyUid)).findAny().ifPresent(this.addedComparisonStudies::remove);
+        this.additionalComparisons.removeIf(rp -> selectedStudyUid.equals(rp.getStudyUID()));
+        this.blendedStudyUIDs.remove(selectedStudyUid);
         for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
             ArrayList<StudyListObject> newModel = new ArrayList<StudyListObject>();
             for (StudyListObject obj : c.getModel()) {
@@ -1308,6 +1322,9 @@ implements IReportSeverityEditableObserver {
                 newModel.add(obj);
             }
             c.setModel(newModel);
+        }
+        if (this.addedComparisonStudies.isEmpty() && this.additionalComparisons.isEmpty()) {
+            this.lastTriggeredAddedSearchStudyUID = null;
         }
     }
 
