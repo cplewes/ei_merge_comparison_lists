@@ -145,6 +145,7 @@ implements IReportSeverityEditableObserver {
     private boolean additionalComparisonsLoaded = false;
     private boolean isBlendingActive = false;
     private IAdaptable lastDomainModel;
+    private Set<String> blendedStudyUIDs = new HashSet<String>();
     private DisplayStrategy displayStrategy;
     private ImageAreaGateway gateway;
     private PopupMenuListener popupListener;
@@ -534,8 +535,16 @@ implements IReportSeverityEditableObserver {
         }
 
         this.setComparisonObservers();
-        this.model.fillModel(activeStudies, comparisonStudies);
-        this.logDebug("EI_DISPLAY: After model.fillModel - model comparison size: " + this.model.getComparisonStudies().size());
+
+        // Use refillModel during blending to prevent accumulation, fillModel otherwise for normal operation
+        if (this.isBlendingActive) {
+            this.logDebug("EI_DISPLAY: Using refillModel() during blending to prevent study accumulation");
+            this.model.refillModel(activeStudies, comparisonStudies);
+        } else {
+            this.logDebug("EI_DISPLAY: Using fillModel() for normal operation");
+            this.model.fillModel(activeStudies, comparisonStudies);
+        }
+        this.logDebug("EI_DISPLAY: After model fill/refill - model comparison size: " + this.model.getComparisonStudies().size());
 
         // Log timing information for user experience analysis
         long currentTime = System.currentTimeMillis();
@@ -856,13 +865,37 @@ implements IReportSeverityEditableObserver {
 
     private void updateComparisonList(Collection<RequestedProcedure> actives, Collection<RequestedProcedure> comparisons, SplitMergeHandlerWrapper splitMergeHandler, boolean isTask) {
         ArrayList<StudyListObject> studies = new ArrayList<StudyListObject>();
+        this.logDebug("EI_FILTER: updateComparisonList processing " + comparisons.size() + " comparison studies");
+
         for (RequestedProcedure study : comparisons) {
+            boolean isBlendedStudy = this.blendedStudyUIDs.contains(study.getStudyUID());
             Set<ServiceRequest> activeServiceRequests = this.getActiveServiceRequests(actives);
-            if (AbstractDataObject.contains(new ArrayList<ServiceRequest>(activeServiceRequests), study.getServiceRequest())) continue;
+            boolean hasMatchingServiceRequest = AbstractDataObject.contains(new ArrayList<ServiceRequest>(activeServiceRequests), study.getServiceRequest());
+
+            this.logDebug("EI_FILTER: Study " + study.getStudyUID() + " - isBlended: " + isBlendedStudy + ", hasMatchingServiceRequest: " + hasMatchingServiceRequest);
+
+            // Allow blended studies even if they have matching ServiceRequests
+            if (hasMatchingServiceRequest && !isBlendedStudy) {
+                this.logDebug("EI_FILTER: Filtering out non-blended study with matching ServiceRequest: " + study.getStudyUID());
+                continue;
+            }
+
+            this.logDebug("EI_FILTER: Including study in comparison list: " + study.getStudyUID());
             StudyListObject obj = this.createComparisonStudy(study, splitMergeHandler, isTask);
             this.moveToActiveStudyList.stream().filter(object -> object.getRequestedProcedure().isSameObject(study)).findAny().ifPresent(object -> obj.setManualClicked(object.isManualClicked()));
             studies.add(obj);
         }
+
+        // Log filtering results for validation
+        this.logDebug("EI_FILTER: === FILTERING RESULTS ===");
+        this.logDebug("EI_FILTER: Input comparison studies: " + comparisons.size());
+        this.logDebug("EI_FILTER: Output study objects: " + studies.size());
+        this.logDebug("EI_FILTER: Current blended study count: " + this.blendedStudyUIDs.size());
+        if (comparisons.size() != studies.size()) {
+            int filteredCount = comparisons.size() - studies.size();
+            this.logDebug("EI_FILTER: *** " + filteredCount + " studies were filtered out by ServiceRequest matching ***");
+        }
+
         studies.sort(this.sortor);
         for (ComparisonStudyListController c : this.comparisons) {
             if (splitMergeHandler.getWrappedHandler() instanceof ReportingSplitMergeHandler) {
@@ -1052,6 +1085,8 @@ implements IReportSeverityEditableObserver {
                             this.isBlendingActive = false;
                             this.logDebug("EI_BLENDING: === BLENDING FULLY COMPLETED ===");
                             this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
+                            this.logDebug("EI_BLENDING: Clearing blendedStudyUIDs set (size: " + this.blendedStudyUIDs.size() + ")");
+                            // Keep blended study UIDs for future filtering - don't clear them here
                         });
                     });
                 });
@@ -1140,6 +1175,11 @@ implements IReportSeverityEditableObserver {
         if (!inAdditionalComparisons && !inComparisonStudies) {
             this.logDebug("EI_DEBUG: Study not found in either collection - adding to blended list");
             this.additionalComparisons.add(requestedProcedure);
+
+            // Track this study as blended to bypass ServiceRequest filtering later
+            this.blendedStudyUIDs.add(requestedProcedure.getStudyUID());
+            this.logDebug("EI_DEBUG: Added study to blendedStudyUIDs: " + requestedProcedure.getStudyUID());
+
             LOGGER.info("DEBUG: additionalComparisons size after add: " + this.additionalComparisons.size());
 
             // Set flag to prevent filtering of Added studies in future display() calls

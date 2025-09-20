@@ -18,3 +18,6 @@ temp/
 *.bak
 
 # Generated diffs are now tracked for comparison history
+
+# Decompiled source cache
+ei_cache_decompiled/
