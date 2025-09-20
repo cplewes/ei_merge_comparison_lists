@@ -491,7 +491,7 @@ implements IReportSeverityEditableObserver {
         if (!this.isBlendingActive) {
             this.logDebug("EI_DISPLAY: Not in blending mode - applying removeIf filter");
             int sizeBefore = this.additionalComparisons.size();
-            this.additionalComparisons.removeIf(s -> this.containsStudy((Collection<RequestedProcedure>)activeStudies, (RequestedProcedure)s));
+            this.additionalComparisons.removeIf(s -> this.containsStudy((Collection<RequestedProcedure>)activeStudies, (RequestedProcedure)s) && !this.blendedStudyUIDs.contains(s.getStudyUID()));
             int sizeAfter = this.additionalComparisons.size();
             this.logDebug("EI_DISPLAY: removeIf filter removed " + (sizeBefore - sizeAfter) + " studies");
         } else {
@@ -1091,6 +1091,7 @@ implements IReportSeverityEditableObserver {
         if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
             !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
             this.additionalComparisons.add(requestedProcedure);
+            this.blendedStudyUIDs.add(requestedProcedure.getStudyUID());
             this.setAdditionalComparisonsLoaded(true); // Prevent filtering that excludes external studies
         }
     }
