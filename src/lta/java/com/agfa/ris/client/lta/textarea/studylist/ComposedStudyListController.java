@@ -644,6 +644,18 @@ implements IReportSeverityEditableObserver {
             .anyMatch(existing -> existing.getStudyUID().equals(study.getStudyUID()));
     }
 
+    private boolean containsStudyByUID(Collection<RequestedProcedure> collection, String studyUID) {
+        // Strict UID-only matching for blended studies to prevent false duplicate detection
+        return collection.stream()
+            .anyMatch(existing -> existing.getStudyUID().equals(studyUID));
+    }
+
+    private boolean containsStudyOld(Collection<RequestedProcedure> collection, RequestedProcedure study) {
+        // Use StudyUID comparison instead of primary key to handle external studies
+        return collection.stream()
+            .anyMatch(existing -> existing.getStudyUID().equals(study.getStudyUID()));
+    }
+
     private static String lastFileError = null;
     private static int fileErrorCount = 0;
 
@@ -1101,8 +1113,8 @@ implements IReportSeverityEditableObserver {
         }
         
         // Simple blending - directly add to main comparison list without filtering
-        if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
-            !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
+        if (!this.containsStudyByUID(this.additionalComparisons, requestedProcedure.getStudyUID()) &&
+            !this.containsStudyByUID(this.model.getComparisonStudies(), requestedProcedure.getStudyUID())) {
             this.additionalComparisons.add(requestedProcedure);
             this.blendedStudyUIDs.add(requestedProcedure.getStudyUID());
             this.setAdditionalComparisonsLoaded(true); // Prevent filtering that excludes external studies
