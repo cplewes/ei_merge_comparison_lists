@@ -144,7 +144,6 @@ implements IReportSeverityEditableObserver {
     private IReportSeverityObservable reportSeverityObservable;
     private boolean additionalComparisonsLoaded = false;
     private boolean isBlendingActive = false;
-    private IAdaptable lastDomainModel;
     private Set<String> blendedStudyUIDs = new HashSet<String>();
     private DisplayStrategy displayStrategy;
     private ImageAreaGateway gateway;
@@ -482,13 +481,11 @@ implements IReportSeverityEditableObserver {
     public void display(IAdaptable domainModel) {
         try {
             // Store current domain model for potential re-display after blending
-            this.lastDomainModel = domainModel;
             this.logDebug("EI_TRACE: display() method called");
             this.logDebug("EI_DISPLAY: isBlendingActive: " + this.isBlendingActive);
             this.logDebug("EI_DISPLAY: additionalComparisons size before processing: " + this.additionalComparisons.size());
             StudyListData studyListData = (StudyListData)domainModel.getAdapter(StudyListData.class);
             List<RequestedProcedure> activeStudies = studyListData.getActiveStudies();
-            this.logDebug("EI_TRACE: display() - activeStudies count: " + activeStudies.size());
             List<RequestedProcedure> comparisonStudies = this.filterByProcedureStatus(studyListData.getRelevantStudies());
         // Only remove if not in blending mode to preserve blended studies
         if (!this.isBlendingActive) {
@@ -568,19 +565,15 @@ implements IReportSeverityEditableObserver {
         // Only trigger Added search if not currently in blending mode to prevent recursive loops
         if (!activeStudies.isEmpty() && !this.isBlendingActive) {
             Patient currentPatient = activeStudies.get(0).getPatient();
-            this.logDebug("EI_TRACE: Got patient from first active study - patient null: " + (currentPatient == null));
             if (currentPatient != null) {
-                this.logDebug("EI_TRACE: Patient found - " + currentPatient.toString() + " - triggering Added search");
                 // Use the existing Added search mechanism to find studies for this patient
                 // This will trigger the existing addAddedComparison logic to blend results
                 this.triggerAddedStudySearchForPatient(currentPatient);
             } else {
-                this.logDebug("EI_TRACE: Patient is null - skipping Added search");
             }
         } else if (this.isBlendingActive) {
             this.logDebug("EI_TRACE: Skipping Added search - currently in blending mode (prevents recursive loop)");
         } else {
-            this.logDebug("EI_TRACE: No active studies - skipping Added search");
         }
 
             AppContext.getCurrentContext().getGlobalEventBus().sendEvent(new ActiveStudiesUpdatedEvent());
@@ -942,7 +935,6 @@ implements IReportSeverityEditableObserver {
         this.logDebug("EI_BLENDING: === BLENDING STARTED ===");
         this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
         try {
-            this.logDebug("EI_TRACE: updateComparisonAddedList() called - event received");
             long blendingStartTime = System.currentTimeMillis();
             this.logDebug("EI_TIMING: Blending started at: " + blendingStartTime);
         String selectedStudyUID;
@@ -1043,7 +1035,6 @@ implements IReportSeverityEditableObserver {
                     protected void onCoordinatorTaskEndedExecuteOnEDT(AbstractLoadableItem item, Status status) {
                         ComposedStudyListController.this.logDebug("EI_TRACE: Local studies callback processing " + sortList.size() + " studies");
                         for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
-                            ComposedStudyListController.this.logStudyDetails("EI_TRACE: Local callback calling addAddedComparison", requestedProcedure);
                             ComposedStudyListController.this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
                         }
                     }
@@ -1053,11 +1044,9 @@ implements IReportSeverityEditableObserver {
         } else {
             this.logDebug("EI_TRACE: No image comparison needed - calling addAddedComparison directly for " + sortList.size() + " studies");
             for (RequestedProcedure requestedProcedure : (List<RequestedProcedure>) sortList) {
-                this.logStudyDetails("EI_TRACE: About to call addAddedComparison for study", requestedProcedure);
                 this.addAddedComparison(requestedProcedure, selectedStudyUID, isLocal);
             }
         }
-            this.logDebug("EI_TRACE: updateComparisonAddedList completed");
             LOGGER.info("updateComparisonAddedList - selectedStudy by study UID[" + selectedStudyUID + "]");
 
         } catch (Exception e) {
@@ -1066,33 +1055,10 @@ implements IReportSeverityEditableObserver {
             LOGGER.error(errorMsg, e);
             throw e;  // Re-throw to maintain existing behavior
         } finally {
-            this.logDebug("EI_BLENDING: === BLENDING PROCESSING COMPLETED ===");
-            this.logDebug("EI_BLENDING: Final additionalComparisons size: " + this.additionalComparisons.size());
-            this.logDebug("EI_BLENDING: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
-
-            // Schedule UI refresh after all EDT tasks complete to ensure proper timing
-            if (this.lastDomainModel != null && this.additionalComparisons.size() > 0) {
-                this.logDebug("EI_BLENDING: Scheduling delayed display() to refresh UI");
-
-                // Use a delay to ensure blending is fully complete before triggering UI refresh
-                SwingUtilities.invokeLater(() -> {
-                    SwingUtilities.invokeLater(() -> {
-                        this.logDebug("EI_BLENDING: Executing delayed display() with " + this.additionalComparisons.size() + " additional comparisons");
-                        this.display(this.lastDomainModel);
-
-                        // Complete blending after UI refresh
-                        SwingUtilities.invokeLater(() -> {
-                            this.isBlendingActive = false;
-                            this.logDebug("EI_BLENDING: === BLENDING FULLY COMPLETED ===");
-                            this.logDebug("EI_BLENDING: isBlendingActive set to: " + this.isBlendingActive);
-                            this.logDebug("EI_BLENDING: Clearing blendedStudyUIDs set (size: " + this.blendedStudyUIDs.size() + ")");
-                            // Keep blended study UIDs for future filtering - don't clear them here
-                        });
-                    });
-                });
-            } else {
-                this.isBlendingActive = false;
-                this.logDebug("EI_BLENDING: No additional comparisons to display - setting isBlendingActive to false");
+            // Simple cleanup - no complex EDT chaining needed with simplified addAddedComparison
+            this.isBlendingActive = false;
+            if (this.additionalComparisons.size() > 0) {
+                this.logDebug("EI_BLENDING: Blending completed with " + this.additionalComparisons.size() + " additional studies");
             }
         }
     }
@@ -1103,116 +1069,30 @@ implements IReportSeverityEditableObserver {
     }
 
     private void addAddedComparison(RequestedProcedure requestedProcedure, String selectedStudyUID, boolean isLocal) {
-        this.logDebug("=== EI_DEBUG: addAddedComparison() called ===");
-        this.logStudyDetails("EI_DEBUG: Processing study", requestedProcedure);
-        // Use the actual study's UID instead of the passed selectedStudyUID
-        String actualSelectedStudyUID = requestedProcedure.getStudyUID();
-        this.logDebug("EI_DEBUG: selectedStudyUID=" + actualSelectedStudyUID + ", isLocal=" + isLocal);
-
+        // Original AGFA logic - handle LOCAL studies
         if (LOCAL.equals(requestedProcedure.getAeCode())) {
-            LOGGER.info("DEBUG: Study has LOCAL AeCode, checking for existing comparison study");
             for (RequestedProcedure comparison : this.model.getComparisonStudies()) {
-                if (!comparison.getStudyUID().equals(requestedProcedure.getStudyUID())) continue;
-                LOGGER.info("DEBUG: Found matching comparison study, creating deep copy");
-                requestedProcedure = (RequestedProcedure)comparison.deepCopy();
-                requestedProcedure.setAeTitle(LOCAL);
-                break;
+                if (comparison.getStudyUID().equals(requestedProcedure.getStudyUID())) {
+                    requestedProcedure = (RequestedProcedure)comparison.deepCopy();
+                    requestedProcedure.setAeTitle(LOCAL);
+                    break;
+                }
             }
         }
-
-        LOGGER.info("DEBUG: Adding to addedComparisonStudies list (size before: " + this.addedComparisonStudies.size() + ")");
+        
+        // Original AGFA logic - add to Added tab
         this.addedComparisonStudies.add(requestedProcedure);
-        LOGGER.info("DEBUG: addedComparisonStudies size after: " + this.addedComparisonStudies.size());
-
         StudyDisplayUpdater.getInstance().addStudy(requestedProcedure);
         for (ComparisonAddedStudyListController c : this.comparisonAddedList) {
             c.display(this.getStudyListObjects(this.addedComparisonStudies, isLocal));
         }
-        // Skip automatic study selection to prevent UI tab switching to Added tab
-        // Studies are blended into main Comparison list below, so user stays on Comparison tab
-
-        // NEW: also blend Added studies into the main Comparison list WITHOUT filtering
-        // This keeps Added visible for users who open it, but no click is needed to see items in Comparison.
-        // Use direct addition to additionalComparisons to avoid filterByProcedureStatus() that excludes external studies
-        this.logDebug("EI_DEBUG: Starting blending logic for main comparison list");
-        this.logDebug("EI_DEBUG: Current additionalComparisons size: " + this.additionalComparisons.size());
-        this.logDebug("EI_DEBUG: Current comparisonStudies size: " + this.model.getComparisonStudies().size());
-
-        boolean inAdditionalComparisons = this.containsStudy(this.additionalComparisons, requestedProcedure);
-        boolean inComparisonStudies = this.containsStudy(this.model.getComparisonStudies(), requestedProcedure);
-
-        this.logDebug("EI_DEBUG: Study already in additionalComparisons: " + inAdditionalComparisons);
-        this.logDebug("EI_DEBUG: Study already in comparisonStudies: " + inComparisonStudies);
-
-        if (inAdditionalComparisons) {
-            LOGGER.info("DEBUG: Study found in additionalComparisons - checking primary keys:");
-            for (RequestedProcedure existing : this.additionalComparisons) {
-                try {
-                    if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
-                        this.logStudyDetails("DEBUG: Matching study in additionalComparisons", existing);
-                        break;
-                    }
-                } catch (IllegalStateException e) {
-                    this.logDebug("DEBUG: External study without numeric primary key in additionalComparisons - skipping primary key comparison");
-                }
-            }
-        }
-
-        if (inComparisonStudies) {
-            LOGGER.info("DEBUG: Study found in comparisonStudies - checking primary keys:");
-            for (RequestedProcedure existing : this.model.getComparisonStudies()) {
-                try {
-                    if (existing.getPrimaryKey().equals(requestedProcedure.getPrimaryKey())) {
-                        this.logStudyDetails("DEBUG: Matching study in comparisonStudies", existing);
-                        break;
-                    }
-                } catch (IllegalStateException e) {
-                    this.logDebug("DEBUG: External study without numeric primary key in comparisonStudies - skipping primary key comparison");
-                }
-            }
-        }
-
-        if (!inAdditionalComparisons && !inComparisonStudies) {
-            this.logDebug("EI_DEBUG: Study not found in either collection - adding to blended list");
+        
+        // Simple blending - directly add to main comparison list without filtering
+        if (!this.containsStudy(this.additionalComparisons, requestedProcedure) &&
+            !this.containsStudy(this.model.getComparisonStudies(), requestedProcedure)) {
             this.additionalComparisons.add(requestedProcedure);
-
-            // Track this study as blended to bypass ServiceRequest filtering later
-            this.blendedStudyUIDs.add(requestedProcedure.getStudyUID());
-            this.logDebug("EI_DEBUG: Added study to blendedStudyUIDs: " + requestedProcedure.getStudyUID());
-
-            LOGGER.info("DEBUG: additionalComparisons size after add: " + this.additionalComparisons.size());
-
-            // Set flag to prevent filtering of Added studies in future display() calls
-            this.setAdditionalComparisonsLoaded(true);
-            LOGGER.info("DEBUG: Set additionalComparisonsLoaded to true");
-
-            // Update the main comparison model to show the blended study
-            List<RequestedProcedure> newComparisons = new ArrayList<>(this.model.getComparisonStudies());
-            newComparisons.add(requestedProcedure);
-            LOGGER.info("DEBUG: Created newComparisons list with size: " + newComparisons.size());
-
-            this.model.refillModel(new ArrayList<>(this.model.getActiveStudies()), newComparisons);
-            LOGGER.info("DEBUG: Called model.refillModel() with " + this.model.getActiveStudies().size() + " active studies and " + newComparisons.size() + " comparison studies");
-
-            // Update ReportingContext with all studies
-            Stream<RequestedProcedure> currentStudiesStream = Stream.concat(this.model.getActiveStudies().stream(), this.model.getComparisonStudies().stream());
-            List<RequestedProcedure> allStudies = currentStudiesStream.collect(Collectors.toList());
-            ReportingContext.setAllPatientProcedures(allStudies);
-            LOGGER.info("DEBUG: Updated ReportingContext with " + allStudies.size() + " total studies");
-
-            // Force UI refresh to immediately show the new blended study
-            this.updateComparisonList(this.model.getActiveStudies(), this.model.getComparisonStudies(), this.splitMergeHandler, false);
-            LOGGER.info("DEBUG: Called updateComparisonList() for UI refresh");
-
-            this.comparisons.forEach(ComparisonStudyListController::triggerTabTitleUpdate);
-            LOGGER.info("DEBUG: Triggered tab title updates for all comparisons");
-
-            this.logDebug("EI_DEBUG: Final comparisonStudies size: " + this.model.getComparisonStudies().size());
-        } else {
-            this.logDebug("EI_DEBUG: Study already exists in collections - skipping blending");
+            this.setAdditionalComparisonsLoaded(true); // Prevent filtering that excludes external studies
         }
-
-        this.logDebug("=== EI_DEBUG: addAddedComparison() completed ===");
     }
 
     private void showWarnDialog() {
