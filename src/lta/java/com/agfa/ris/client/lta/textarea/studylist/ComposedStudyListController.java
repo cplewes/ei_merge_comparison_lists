@@ -474,6 +474,7 @@ implements IReportSeverityEditableObserver {
         this.selectedStudyModel.setStudyModule(StudyModule.Active);
         this.model.clear();
         this.additionalComparisons.clear();
+        this.setAdditionalComparisonsLoaded(false);
         this.blendedStudyUIDs.clear();
         this.lastTriggeredAddedSearchStudyUID = null;
         if (this.splitMergeHandler != null) {
@@ -1324,6 +1325,7 @@ implements IReportSeverityEditableObserver {
             c.setModel(newModel);
         }
         if (this.addedComparisonStudies.isEmpty() && this.additionalComparisons.isEmpty()) {
+            this.setAdditionalComparisonsLoaded(false);
             this.lastTriggeredAddedSearchStudyUID = null;
         }
     }

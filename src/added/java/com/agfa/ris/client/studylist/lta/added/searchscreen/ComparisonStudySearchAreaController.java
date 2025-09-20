@@ -88,7 +88,7 @@ extends AbstractComparisonSearchAreaController<RequestedProcedure> {
             result = this.addedComparisonStudiesList.updateList(add2ComparisonStudiesEvent);
         }
 
-        boolean shouldBroadcast = result || Objects.isNull(this.addedComparisonStudiesList);
+        boolean shouldBroadcast = (result || Objects.isNull(this.addedComparisonStudiesList)) && !selectedStudies.isEmpty();
         if (shouldBroadcast) {
             // Send event globally for blending functionality
             globalEventBus.sendEvent((IEvent)add2ComparisonStudiesEvent);
